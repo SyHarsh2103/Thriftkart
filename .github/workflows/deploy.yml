@@ -37,10 +37,12 @@ jobs:
               TARGET_DIR=\"/var/www/Thriftkart-production\"
               PM2_NAME=\"Thriftkart-API-production\"
               ADMIN_DIR=\"/var/www/html/Thriftkart-Admin-production\"
+              CLIENT_DIR=\"/var/www/html/Thriftkart-Client-production\"
             else
               TARGET_DIR=\"/var/www/Thriftkart-$BRANCH\"
               PM2_NAME=\"Thriftkart-API-$BRANCH\"
               ADMIN_DIR=\"/var/www/html/Thriftkart-Admin-$BRANCH\"
+              CLIENT_DIR=\"/var/www/html/Thriftkart-Client-$BRANCH\"
             fi
 
             echo '📁 Navigating to target directory: \$TARGET_DIR'
@@ -72,6 +74,16 @@ jobs:
             echo '📤 Deploying Admin build to \$ADMIN_DIR'
             mkdir -p \$ADMIN_DIR
             cp -r build/* \$ADMIN_DIR/
+
+            echo '🧱 Building Client App...'
+            cd ../client
+            npm ci || npm install --legacy-peer-deps
+            npx update-browserslist-db@latest --update-db || true
+            CI=false npm run build
+
+            echo '📤 Deploying Client build to \$CLIENT_DIR'
+            mkdir -p \$CLIENT_DIR
+            cp -r build/* \$CLIENT_DIR/
 
             echo '✅ Deployment completed for branch: \$BRANCH'
           "
