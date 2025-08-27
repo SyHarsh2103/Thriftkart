@@ -1,0 +1,77 @@
+name: Deploy Thriftkart to VPS
+
+on:
+  push:
+    branches: [main, staging]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_PORT: ${{ secrets.SSH_PORT }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+
+    steps:
+      - name: 📦 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔐 Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: 🚀 Deploy to VPS
+        shell: bash
+        run: |
+          echo "🚧 Starting deployment..."
+          BRANCH=${GITHUB_REF##*/}
+          echo "🔎 Detected GitHub branch: $BRANCH"
+
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "
+            echo '🔁 Inside VPS - Preparing environment for branch: $BRANCH'
+
+            if [ \"$BRANCH\" = \"main\" ]; then
+              TARGET_DIR=\"/var/www/Thriftkart-production\"
+              PM2_NAME=\"Thriftkart-API-production\"
+              ADMIN_DIR=\"/var/www/html/Thriftkart-Admin-production\"
+            else
+              TARGET_DIR=\"/var/www/Thriftkart-$BRANCH\"
+              PM2_NAME=\"Thriftkart-API-$BRANCH\"
+              ADMIN_DIR=\"/var/www/html/Thriftkart-Admin-$BRANCH\"
+            fi
+
+            echo '📁 Navigating to target directory: \$TARGET_DIR'
+            cd \$TARGET_DIR || { echo '❌ Target directory not found'; exit 1; }
+
+            echo '🧹 Cleaning local changes'
+            git reset --hard HEAD
+            git clean -fd
+
+            echo '🔄 Pulling latest code from GitHub...'
+            git pull origin \$BRANCH
+
+            echo '🔧 Installing server dependencies...'
+            cd server
+            if [ -f \".env.\$BRANCH\" ]; then
+              cp \".env.\$BRANCH\" .env
+            else
+              echo '⚠️ Warning: .env.\$BRANCH not found, skipping...'
+            fi
+            npm install
+            NODE_ENV=\$BRANCH pm2 restart \$PM2_NAME || NODE_ENV=\$BRANCH pm2 start index.js --name \$PM2_NAME
+
+            echo '🧱 Building Admin Panel...'
+            cd ../admin
+            npm ci || npm install --legacy-peer-deps
+            npx update-browserslist-db@latest --update-db || true
+            CI=false npm run build
+
+            echo '📤 Deploying Admin build to \$ADMIN_DIR'
+            mkdir -p \$ADMIN_DIR
+            cp -r build/* \$ADMIN_DIR/
+
+            echo '✅ Deployment completed for branch: \$BRANCH'
+          "
