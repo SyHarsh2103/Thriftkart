@@ -1,192 +1,179 @@
 const { HomeSideBanners } = require("../models/homeSideBanner");
-const { ImageUpload } = require("../models/imageUpload");
 const express = require("express");
 const router = express.Router();
 const multer = require("multer");
+const path = require("path");
 const fs = require("fs");
 
-const cloudinary = require("cloudinary").v2;
+// ----------- Local Upload Directory -----------
+const UPLOAD_DIR =
+  process.env.HOME_SIDE_BANNER_PATH ||
+  path.join(__dirname, "..", "uploads", "homeSideBanners");
 
-cloudinary.config({
-  cloud_name: process.env.cloudinary_Config_Cloud_Name,
-  api_key: process.env.cloudinary_Config_api_key,
-  api_secret: process.env.cloudinary_Config_api_secret,
-  secure: true,
-});
+const BASE_URL = process.env.BASE_URL || "http://localhost:8000";
 
-var imagesArr = [];
+// Ensure folder exists
+if (!fs.existsSync(UPLOAD_DIR)) {
+  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+}
 
+// ----------- Multer Config -----------
 const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, "uploads");
-  },
-  filename: function (req, file, cb) {
-    cb(null, `${Date.now()}_${file.originalname}`);
-    //imagesArr.push(`${Date.now()}_${file.originalname}`)
+  destination: (req, file, cb) => cb(null, UPLOAD_DIR),
+  filename: (req, file, cb) => {
+    cb(null, `${Date.now()}_${file.originalname.replace(/\s+/g, "_")}`);
   },
 });
 
-const upload = multer({ storage: storage });
+const fileFilter = (req, file, cb) => {
+  const allowed = ["image/jpeg", "image/png", "image/jpg", "image/webp"];
+  if (allowed.includes(file.mimetype)) cb(null, true);
+  else cb(new Error("Only JPG/PNG/WEBP images allowed"));
+};
 
-router.post(`/upload`, upload.array("images"), async (req, res) => {
-  imagesArr = [];
+const upload = multer({
+  storage,
+  fileFilter,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+});
 
-  try {
-    for (let i = 0; i < req?.files?.length; i++) {
-      const options = {
-        use_filename: true,
-        unique_filename: false,
-        overwrite: false,
-      };
+// ----------- Helper to build URLs -----------
+const toImageUrls = (filenames = []) =>
+  filenames.map((name) => `${BASE_URL}/uploads/homeSideBanners/${name}`);
 
-      const img = await cloudinary.uploader.upload(
-        req.files[i].path,
-        options,
-        function (error, result) {
-          imagesArr.push(result.secure_url);
-          fs.unlinkSync(`uploads/${req.files[i].filename}`);
-        }
-      );
+// ---------------- UPLOAD ----------------
+router.post("/upload", (req, res) => {
+  upload.array("images", 10)(req, res, (err) => {
+    if (err) {
+      if (err.code === "LIMIT_FILE_SIZE") {
+        return res
+          .status(400)
+          .json({ success: false, message: "Each file must be ≤ 5 MB" });
+      }
+      return res.status(400).json({ success: false, message: err.message });
     }
 
-    let imagesUploaded = new ImageUpload({
-      images: imagesArr,
-    });
-
-    imagesUploaded = await imagesUploaded.save();
-    return res.status(200).json(imagesArr);
-  } catch (error) {
-    console.log(error);
-  }
+    const filenames = (req.files || []).map((f) => f.filename);
+    res.status(200).json(filenames); // return just filenames
+  });
 });
 
-router.get(`/`, async (req, res) => {
-  try {
-    const bannerList = await HomeSideBanners.find();
-
-    if (!bannerList) {
-      res.status(500).json({ success: false });
-    }
-
-    return res.status(200).json(bannerList);
-  } catch (error) {
-    res.status(500).json({ success: false });
-  }
-});
-
-router.get("/:id", async (req, res) => {
-  slideEditId = req.params.id;
-
-  const slide = await HomeSideBanners.findById(req.params.id);
-
-  if (!slide) {
-    res
-      .status(500)
-      .json({ message: "The Banner with the given ID was not found." });
-  }
-  return res.status(200).send(slide);
-});
-
+// ---------------- CREATE ----------------
 router.post("/create", async (req, res) => {
-  let newEntry = new HomeSideBanners({
-    images: imagesArr,
-    catId: req.body.catId,
-    catName:req.body.catName,
-    subCatId: req.body.subCatId,
-    subCatName:req.body.subCatName
-  });
+  try {
+    const { images = [], catId, catName, subCatId, subCatName } = req.body;
 
-  if (!newEntry) {
-    res.status(500).json({
-      error: err,
-      success: false,
+    let banner = new HomeSideBanners({
+      images: Array.isArray(images) ? images : [],
+      catId,
+      catName,
+      subCatId,
+      subCatName,
     });
+
+    const saved = await banner.save();
+    res.status(201).json(saved);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
-
-  newEntry = await newEntry.save();
-
-  imagesArr = [];
-
-  res.status(201).json(newEntry);
 });
 
+// ---------------- GET ALL ----------------
+router.get("/", async (req, res) => {
+  try {
+    const list = await HomeSideBanners.find();
+    const withUrls = list.map((b) => ({
+      ...b.toObject(),
+      images: toImageUrls(b.images),
+    }));
+    res.status(200).json(withUrls);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ---------------- GET BY ID ----------------
+router.get("/:id", async (req, res) => {
+  try {
+    const banner = await HomeSideBanners.findById(req.params.id);
+    if (!banner)
+      return res
+        .status(404)
+        .json({ success: false, message: "HomeSideBanner not found" });
+
+    res.json({ ...banner.toObject(), images: toImageUrls(banner.images) });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ---------------- DELETE SINGLE IMAGE ----------------
 router.delete("/deleteImage", async (req, res) => {
-  const imgUrl = req.query.img;
+  try {
+    const img = req.query.img; // filename only
+    if (!img)
+      return res
+        .status(400)
+        .json({ success: false, message: "img query required" });
 
-  // console.log(imgUrl)
-
-  const urlArr = imgUrl.split("/");
-  const image = urlArr[urlArr.length - 1];
-
-  const imageName = image.split(".")[0];
-
-  const response = await cloudinary.uploader.destroy(
-    imageName,
-    (error, result) => {
-      // console.log(error, res)
+    const filePath = path.join(UPLOAD_DIR, img);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      return res.status(200).json({ success: true, message: "Image deleted" });
     }
-  );
-
-  if (response) {
-    res.status(200).send(response);
+    return res.status(404).json({ success: false, message: "Image not found" });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
+// ---------------- DELETE WHOLE BANNER ----------------
 router.delete("/:id", async (req, res) => {
-  const item = await HomeSideBanners.findById(req.params.id);
-  const images = item.images;
+  try {
+    const banner = await HomeSideBanners.findById(req.params.id);
+    if (!banner)
+      return res
+        .status(404)
+        .json({ success: false, message: "HomeSideBanner not found" });
 
-  for (img of images) {
-    const imgUrl = img;
-    const urlArr = imgUrl.split("/");
-    const image = urlArr[urlArr.length - 1];
+    for (const img of banner.images) {
+      const filePath = path.join(UPLOAD_DIR, img);
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    }
 
-    const imageName = image.split(".")[0];
-
-    cloudinary.uploader.destroy(imageName, (error, result) => {
-      // console.log(error, result);
-    });
-    //  console.log(imageName)
+    await HomeSideBanners.findByIdAndDelete(req.params.id);
+    res.json({ success: true, message: "Banner deleted" });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
-
-  const deletedItem = await HomeSideBanners.findByIdAndDelete(req.params.id);
-
-  if (!deletedItem) {
-    res.status(404).json({
-      message: "Banner not found!",
-      success: false,
-    });
-  }
-
-  res.status(200).json({
-    success: true,
-    message: "Banner Deleted!",
-  });
 });
 
+// ---------------- UPDATE ----------------
 router.put("/:id", async (req, res) => {
-  const slideItem = await HomeSideBanners.findByIdAndUpdate(
-    req.params.id,
-    {
-      images: req.body.images,
-      catId: req.body.catId,
-      catName:req.body.catName,
-      subCatId: req.body.subCatId,
-      subCatName:req.body.subCatName
-    },
-    { new: true }
-  );
+  try {
+    const { images, catId, catName, subCatId, subCatName } = req.body;
 
-  if (!slideItem) {
-    return res.status(500).json({
-      message: "Item cannot be updated!",
-      success: false,
-    });
+    const updated = await HomeSideBanners.findByIdAndUpdate(
+      req.params.id,
+      {
+        ...(Array.isArray(images) ? { images } : {}),
+        ...(catId ? { catId } : {}),
+        ...(catName ? { catName } : {}),
+        ...(subCatId ? { subCatId } : {}),
+        ...(subCatName ? { subCatName } : {}),
+      },
+      { new: true }
+    );
+
+    if (!updated)
+      return res
+        .status(404)
+        .json({ success: false, message: "HomeSideBanner not found" });
+
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
-
-  imagesArr = [];
-
-  res.send(slideItem);
 });
 
 module.exports = router;

@@ -1,221 +1,176 @@
-const { HomeBanner } = require('../models/homeBanner');
-const { ImageUpload } = require('../models/imageUpload');
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const multer = require('multer');
-const fs = require("fs");
-const { uploadToDrive } = require("../utils/googleDrive");
 const path = require("path");
-const UPLOAD_FOLDER_ID = process.env.DRIVE_FOLDER_ID;
+const fs = require("fs");
+const multer = require("multer");
 
-const cloudinary = require('cloudinary').v2;
+const { HomeBanner } = require("../models/homeBanner");
 
-cloudinary.config({
-    cloud_name: process.env.cloudinary_Config_Cloud_Name,
-    api_key: process.env.cloudinary_Config_api_key,
-    api_secret: process.env.cloudinary_Config_api_secret,
-    secure: true
-});
+// -------- ENV paths --------
+const UPLOAD_DIR =
+  process.env.HOME_BANNER_PATH ||
+  path.join(__dirname, "..", "uploads", "homeBanner");
+const BASE_URL = process.env.BASE_URL || "http://localhost:8000";
 
-var imagesArr = [];
+// Ensure upload directory exists
+if (!fs.existsSync(UPLOAD_DIR)) {
+  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+}
 
+// -------- Multer config (5MB, images only) --------
 const storage = multer.diskStorage({
-
-    destination: function (req, file, cb) {
-        cb(null, "uploads");
-    },
-    filename: function (req, file, cb) {
-        cb(null, `${Date.now()}_${file.originalname}`);
-        //imagesArr.push(`${Date.now()}_${file.originalname}`)
-
-    },
-})
-
-
-const upload = multer({ storage: storage })
-
-router.post(`/upload`, upload.array("images"), async (req, res) => {
-    imagesArr=[];
-
-    try{
-    
-        for (let i = 0; i < req?.files?.length; i++) {
-
-            const options = {
-                use_filename: true,
-                unique_filename: false,
-                overwrite: false,
-            };
-    
-            const img = await cloudinary.uploader.upload(req.files[i].path, options,
-                function (error, result) {
-                    imagesArr.push(result.secure_url);
-                    fs.unlinkSync(`uploads/${req.files[i].filename}`);
-                });
-        }
-
-
-        let imagesUploaded = new ImageUpload({
-            images: imagesArr,
-        });
-
-        imagesUploaded = await imagesUploaded.save();
-        return res.status(200).json(imagesArr);
-
-       
-
-    }catch(error){
-        console.log(error);
-    }
-
-
+  destination: (req, file, cb) => cb(null, UPLOAD_DIR),
+  filename: (req, file, cb) =>
+    cb(null, `${Date.now()}_${file.originalname.replace(/\s+/g, "_")}`),
 });
-  
-  
+
+const fileFilter = (req, file, cb) => {
+  const allowed = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
+  if (allowed.includes(file.mimetype)) return cb(null, true);
+  cb(new Error("Only JPG/PNG/WEBP images allowed"));
+};
+
+const upload = multer({
+  storage,
+  fileFilter,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+});
+
+// Helper: convert stored filenames to public URLs
+const toImageUrls = (filenames = []) =>
+  filenames.map((name) => `${BASE_URL}/uploads/homeBanner/${name}`);
 
 
-router.get(`/`, async (req, res) => {
-
-    try {
-      
-        const bannerImagesList = await HomeBanner.find();
-
-
-        if (!bannerImagesList) {
-            res.status(500).json({ success: false })
-        }
-
-        return res.status(200).json(bannerImagesList);
-
-    } catch (error) {
-        res.status(500).json({ success: false })
+// ---------- UPLOAD (returns array of filenames) ----------
+router.post("/upload", (req, res) => {
+  upload.array("images", 10)(req, res, (err) => {
+    if (err) {
+      if (err.code === "LIMIT_FILE_SIZE") {
+        return res
+          .status(400)
+          .json({ success: false, message: "Each file must be ≤ 5 MB" });
+      }
+      return res.status(400).json({ success: false, message: err.message });
     }
-
-
+    const filenames = (req.files || []).map((f) => f.filename);
+    return res.status(200).json(filenames);
+  });
 });
 
 
+// ---------- CREATE ----------
+router.post("/create", async (req, res) => {
+  try {
+    const { images = [] } = req.body;
 
-router.get('/:id', async (req, res) => {
-    slideEditId = req.params.id;
-
-    const slide = await HomeBanner.findById(req.params.id);
-
-    if (!slide) {
-        res.status(500).json({ message: 'The slide with the given ID was not found.' })
-    }
-    return res.status(200).send(slide);
-})
-
-
-
-router.post('/create', async (req, res) => {
-    
-    let newEntry = new HomeBanner({
-        images: imagesArr,
+    const banner = new HomeBanner({
+      images: Array.isArray(images) ? images : [],
     });
 
-
-
-    if (!newEntry) {
-        res.status(500).json({
-            error: err,
-            success: false
-        })
-    }
-
-
-    newEntry = await newEntry.save();
-    
-    imagesArr = [];
-
-
-    res.status(201).json(newEntry);
-
+    const saved = await banner.save();
+    res.status(201).json({ success: true, banner: saved });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 
-router.delete('/deleteImage', async (req, res) => {
-    const imgUrl = req.query.img;
-
-   // console.log(imgUrl)
-
-    const urlArr = imgUrl.split('/');
-    const image =  urlArr[urlArr.length-1];
-  
-    const imageName = image.split('.')[0];
-
-    const response = await cloudinary.uploader.destroy(imageName, (error,result)=>{
-       // console.log(error, res)
-    })
-
-    if(response){
-        res.status(200).send(response);
-    }
-      
-});
-
-router.delete('/:id', async (req, res) => {
-
-    const item = await HomeBanner.findById(req.params.id);
-    const images = item.images;
-
-    for(img of images){
-        const imgUrl = img;
-        const urlArr = imgUrl.split('/');
-        const image =  urlArr[urlArr.length-1];
-      
-        const imageName = image.split('.')[0];
-
-        cloudinary.uploader.destroy(imageName, (error,result)=>{
-           // console.log(error, result);
-        })
-      //  console.log(imageName)
-    }
-
-
-    const deletedItem = await HomeBanner.findByIdAndDelete(req.params.id);
-
-    if (!deletedItem) {
-        res.status(404).json({
-            message: 'Slide not found!',
-            success: false
-        })
-    }
-
-    res.status(200).json({
-        success: true,
-        message: 'Slide Deleted!'
-    })
+// ---------- GET ALL ----------
+router.get("/", async (req, res) => {
+  try {
+    const list = await HomeBanner.find();
+    const withUrls = list.map((b) => ({
+      ...b.toObject(),
+      images: toImageUrls(b.images),
+    }));
+    res.status(200).json(withUrls);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 
+// ---------- GET ONE ----------
+router.get("/:id", async (req, res) => {
+  try {
+    const banner = await HomeBanner.findById(req.params.id);
+    if (!banner)
+      return res.status(404).json({ success: false, message: "Not found" });
 
-router.put('/:id', async (req, res) => {
+    res.json({ ...banner.toObject(), images: toImageUrls(banner.images) });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
-    const slideItem = await HomeBanner.findByIdAndUpdate(
-        req.params.id,
-        {
-            images: req.body.images,
-        },
-        { new: true }
-    )
 
-    if (!slideItem) {
-        return res.status(500).json({
-            message: 'Item cannot be updated!',
-            success: false
-        })
+// ---------- DELETE SINGLE IMAGE (by filename) ----------
+router.delete("/deleteImage", async (req, res) => {
+  try {
+    const img = req.query.img;
+    if (!img)
+      return res
+        .status(400)
+        .json({ success: false, message: "img query required" });
+
+    const filePath = path.join(UPLOAD_DIR, img);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      return res.status(200).json({ success: true, message: "Image deleted" });
+    }
+    return res
+      .status(404)
+      .json({ success: false, message: "Image not found" });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+
+// ---------- DELETE BANNER ----------
+router.delete("/:id", async (req, res) => {
+  try {
+    const banner = await HomeBanner.findById(req.params.id);
+    if (!banner)
+      return res.status(404).json({ success: false, message: "Not found" });
+
+    // delete files
+    for (const img of banner.images) {
+      const fp = path.join(UPLOAD_DIR, img);
+      if (fs.existsSync(fp)) fs.unlinkSync(fp);
     }
 
-    imagesArr = [];
+    await HomeBanner.findByIdAndDelete(req.params.id);
+    res.status(200).json({ success: true, message: "Banner deleted!" });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
-    res.send(slideItem);
 
-})
+// ---------- UPDATE ----------
+router.put("/:id", async (req, res) => {
+  try {
+    const { images } = req.body;
+    const updates = {
+      ...(Array.isArray(images) ? { images } : {}),
+    };
 
+    const banner = await HomeBanner.findByIdAndUpdate(
+      req.params.id,
+      updates,
+      { new: true }
+    );
 
+    if (!banner)
+      return res
+        .status(404)
+        .json({ success: false, message: "Banner not found" });
 
+    res.json(banner);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 module.exports = router;
-

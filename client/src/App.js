@@ -264,7 +264,7 @@ function App() {
           />
           <Route
             exact={true}
-            path="/product/:id"
+            path="/products/:id"
             element={<ProductDetails />}
           />
           <Route exact={true} path="/cart" element={<Cart />} />

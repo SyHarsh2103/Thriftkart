@@ -1,76 +1,88 @@
 import axios from "axios";
 
-const token=localStorage.getItem("token");
+const getAuthHeaders = () => {
+  const token = localStorage.getItem("token");
+  return {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+  };
+};
 
-const params={
-    headers: {
-        'Authorization': `Bearer ${token}`, // Include your API key in the Authorization header
-        'Content-Type': 'application/json', // Adjust the content type as needed
-      },
-
-} 
-
+// -------- GET --------
 export const fetchDataFromApi = async (url) => {
-    try {
-        const { data } = await axios.get(process.env.REACT_APP_BASE_URL + url,params)
-        return data;
-    } catch (error) {
-        console.log(error);
-        return error;
-    }
-}
+  try {
+    const { data } = await axios.get(process.env.REACT_APP_BASE_URL + url, {
+      headers: getAuthHeaders(),
+    });
+    return data;
+  } catch (error) {
+    console.error("fetchDataFromApi error:", error);
+    return { success: false, msg: "Request failed" };
+  }
+};
 
-
+// -------- POST (file upload) --------
 export const uploadImage = async (url, formData) => {
-    const { res } = await axios.post(process.env.REACT_APP_BASE_URL + url , formData)
-    return res;
-}
+  try {
+    const { data } = await axios.post(process.env.REACT_APP_BASE_URL + url, formData, {
+      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }, 
+    });
+    return data; // expected: array of uploaded filenames
+  } catch (error) {
+    console.error("uploadImage error:", error);
+    return { success: false, msg: "Upload failed" };
+  }
+};
 
+// -------- POST (JSON) --------
 export const postData = async (url, formData) => {
+  try {
+    const { data } = await axios.post(process.env.REACT_APP_BASE_URL + url, formData, {
+      headers: getAuthHeaders(),
+    });
+    return data;
+  } catch (error) {
+    console.error("postData error:", error);
+    return { success: false, msg: "Request failed" };
+  }
+};
 
-    try {
-        const response = await fetch(process.env.REACT_APP_BASE_URL + url, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`, // Include your API key in the Authorization header
-                'Content-Type': 'application/json', // Adjust the content type as needed
-              },
-           
-            body: JSON.stringify(formData)
-        });
+// -------- PUT --------
+export const editData = async (url, updatedData) => {
+  try {
+    const { data } = await axios.put(process.env.REACT_APP_BASE_URL + url, updatedData, {
+      headers: getAuthHeaders(),
+    });
+    return data;
+  } catch (error) {
+    console.error("editData error:", error);
+    return { success: false, msg: "Update failed" };
+  }
+};
 
+// -------- DELETE (no body) --------
+export const deleteData = async (url) => {
+  try {
+    const { data } = await axios.delete(process.env.REACT_APP_BASE_URL + url, {
+      headers: getAuthHeaders(),
+    });
+    return data;
+  } catch (error) {
+    console.error("deleteData error:", error);
+    return { success: false, msg: "Delete failed" };
+  }
+};
 
-      
-
-        if (response.ok) {
-            const data = await response.json();
-            //console.log(data)
-            return data;
-        } else {
-            const errorData = await response.json();
-            return errorData;
-        }
-
-    } catch (error) {
-        console.error('Error:', error);
-    }
-
-
-}
-
-
-export const editData = async (url, updatedData ) => {
-    const { res } = await axios.put(`${process.env.REACT_APP_BASE_URL}${url}`,updatedData)
-    return res;
-}
-
-export const deleteData = async (url ) => {
-    const { res } = await axios.delete(`${process.env.REACT_APP_BASE_URL}${url}`,params)
-    return res;
-}
-
-
-export const deleteImages = async (url,image ) => {
-    const { res } = await axios.delete(`${process.env.REACT_APP_BASE_URL}${url}`,image);
-    return res;
-}
+// -------- DELETE (with body e.g. image) --------
+export const deleteImages = async (url, body = {}) => {
+  try {
+    const { data } = await axios.delete(process.env.REACT_APP_BASE_URL + url, {
+      headers: getAuthHeaders(),
+      data: body, // <-- axios lets you send a body in DELETE
+    });
+    return data;
+  } catch (error) {
+    console.error("deleteImages error:", error);
+    return { success: false, msg: "Delete image failed" };
+  }
+};

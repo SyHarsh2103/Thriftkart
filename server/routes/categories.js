@@ -1,305 +1,218 @@
-const { Category } = require("../models/category");
-const { ImageUpload } = require("../models/imageUpload");
 const express = require("express");
 const router = express.Router();
-const multer = require("multer");
+const path = require("path");
 const fs = require("fs");
+const multer = require("multer");
 const slugify = require("slugify");
 
-const cloudinary = require("cloudinary").v2;
+const { Category } = require("../models/category");
 
-cloudinary.config({
-  cloud_name: process.env.cloudinary_Config_Cloud_Name,
-  api_key: process.env.cloudinary_Config_api_key,
-  api_secret: process.env.cloudinary_Config_api_secret,
-  secure: true,
-});
+// -------- ENV paths --------
+const UPLOAD_DIR = process.env.CATEGORY_IMAGE_PATH || path.join(__dirname, "..", "uploads", "categories");
+const BASE_URL = process.env.BASE_URL || "http://localhost:8000";
 
-var imagesArr = [];
+// Ensure upload directory exists
+if (!fs.existsSync(UPLOAD_DIR)) {
+  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+}
 
+// -------- Multer config (1MB, images only) --------
 const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, "uploads");
-  },
-  filename: function (req, file, cb) {
-    cb(null, `${Date.now()}_${file.originalname}`);
-    //imagesArr.push(`${Date.now()}_${file.originalname}`)
-  },
+  destination: (req, file, cb) => cb(null, UPLOAD_DIR),
+  filename: (req, file, cb) => cb(null, `${Date.now()}_${file.originalname.replace(/\s+/g, "_")}`),
 });
 
-const upload = multer({ storage: storage });
+const fileFilter = (req, file, cb) => {
+  const allowed = ["image/jpeg", "image/png", "image/webp", "image/gif", "image/jpg"];
+  if (allowed.includes(file.mimetype)) return cb(null, true);
+  cb(new Error("Only image files are allowed"));
+};
 
-router.post(`/upload`, upload.array("images"), async (req, res) => {
-  imagesArr = [];
-
-  try {
-    for (let i = 0; i < req?.files?.length; i++) {
-      const options = {
-        use_filename: true,
-        unique_filename: false,
-        overwrite: false,
-      };
-
-      const img = await cloudinary.uploader.upload(
-        req.files[i].path,
-        options,
-        function (error, result) {
-          imagesArr.push(result.secure_url);
-          fs.unlinkSync(`uploads/${req.files[i].filename}`);
-        }
-      );
-    }
-
-    let imagesUploaded = new ImageUpload({
-      images: imagesArr,
-    });
-
-    imagesUploaded = await imagesUploaded.save();
-    return res.status(200).json(imagesArr);
-  } catch (error) {
-    console.log(error);
-  }
+const upload = multer({
+  storage,
+  fileFilter,
+  limits: { fileSize: 1 * 1024 * 1024 }, // 1 MB
 });
 
-const createCategories = (categories, parentId=null) => {
+// Helper: convert stored filenames to public URLs for responses
+const toImageUrls = (filenames = []) =>
+  filenames.map((name) => `${BASE_URL}/uploads/categories/${name}`);
 
+// Helper: build category tree
+const createCategories = (categories, parentId = null) => {
   const categoryList = [];
-  let category;
+  const filtered = parentId == null
+    ? categories.filter((c) => c.parentId === undefined)
+    : categories.filter((c) => String(c.parentId) === String(parentId));
 
-  if (parentId == null) {
-    category = categories.filter((cat) => cat.parentId == undefined);
-  } else {
-    category = categories.filter((cat) => cat.parentId == parentId);
-  }
-  
-  for (let cat of category) {
- 
+  for (const cat of filtered) {
     categoryList.push({
       _id: cat._id,
       id: cat._id,
       name: cat.name,
-      images:cat.images,
-      color:cat.color,
       slug: cat.slug,
-      children: createCategories(categories, cat._id)
+      color: cat.color,
+      images: toImageUrls(cat.images), // return full URLs to frontend
+      children: createCategories(categories, cat._id),
     });
   }
-
   return categoryList;
 };
 
-router.get(`/`, async (req, res) => {
-  try {
-  
-    const categoryList = await Category.find();
-
-      if (!categoryList) {
-        res.status(500).json({ success: false });
+// ---------- UPLOAD (returns array of filenames) ----------
+router.post("/upload", (req, res) => {
+  upload.array("images", 5)(req, res, (err) => {
+    if (err) {
+      if (err.code === "LIMIT_FILE_SIZE") {
+        return res.status(400).json({ success: false, message: "Each file must be ≤ 1 MB" });
       }
-
-    if (categoryList) {
-      const categoryData = createCategories(categoryList);
-
-      return res.status(200).json({
-        categoryList: categoryData
-      });
+      return res.status(400).json({ success: false, message: err.message });
     }
-
-
-  } catch (error) {
-    res.status(500).json({ success: false });
-  }
-});
-
-router.get(`/get/count`, async (req, res) => {
-  const categoryCount = await Category.countDocuments({parentId:undefined});
-
-  if (!categoryCount) {
-    res.status(500).json({ success: false });
-  }
- else{
-  res.send({
-    categoryCount: categoryCount,
+    const filenames = (req.files || []).map((f) => f.filename);
+    return res.status(200).json(filenames);
   });
- }
 });
 
-router.get(`/subCat/get/count`, async (req, res) => {
-  const categoryCount = await Category.find();
-
-  if (!categoryCount) {
-    res.status(500).json({ success: false });
-  }
- else{
-
-  const subCatList = [];
-  for (let cat of categoryCount) {
-    if(cat.parentId!==undefined){
-      subCatList.push(cat);
-    }
-  }
-
-  res.send({
-    categoryCount: subCatList.length,
-  });
- }
-});
-
-
-const createCat = (categories, parentId=null,cat) => {
-
-  const categoryList = [];
-  let category;
-
-  if (parentId == null) {
-    category = categories.filter((cat) => cat.parentId == undefined);
-  } else {
-    category = categories.filter((cat) => cat.parentId == parentId);
-
-  }
-  categoryList.push({
-    _id: cat._id,
-    id: cat._id,
-    name: cat.name,
-    images:cat.images,
-    color:cat.color,
-    slug: cat.slug,
-    children: category
-  });
-
-  return categoryList;
-
-};
-
-router.get("/:id", async (req, res) => {
-
-  try {
-    const categoryList = await Category.find();
-    const category = await Category.findById(req.params.id);
-  
-
-    if (!category) {
-      res
-        .status(500)
-        .json({ message: "The category with the given ID was not found." });
-    }
-
-    if (category) {
-      const categoryData = createCat(categoryList, category._id, category);
-
-      return res.status(200).json({
-        categoryData
-      });
-    }
-
-
-  } catch (error) {
-    res.status(500).json({ success: false });
-  }
-
-
-
-});
-
+// ---------- CREATE ----------
 router.post("/create", async (req, res) => {
   try {
-    let catObj = {
-      name: req.body.name,
-      slug: req.body.name,
-      images: imagesArr.length > 0 ? imagesArr : undefined,
-      color: req.body.color || undefined,
-      parentId: req.body.parentId || undefined,
-    };
+    const { name, color, parentId, images = [] } = req.body;
+    if (!name) return res.status(400).json({ success: false, message: "Name is required" });
 
-    let category = new Category(catObj);
-    let savedCategory = await category.save();  // Ensure save() succeeds
+    const slug = slugify(name, { lower: true, strict: true });
 
-    imagesArr = []; // Reset images array
+    const category = new Category({
+      name,
+      slug,
+      color: color || undefined,
+      parentId: parentId || undefined,
+      images: Array.isArray(images) ? images : [], // store only filenames
+    });
 
-    res.status(201).json({ success: true, category: savedCategory });
+    const saved = await category.save();
+    res.status(201).json({ success: true, category: saved });
   } catch (err) {
-    console.error("Error saving category:", err);
+    console.error("Create category error:", err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
+// ---------- GET ALL (hierarchy with full image URLs) ----------
+router.get("/", async (req, res) => {
+  try {
+    const all = await Category.find();
+    const data = createCategories(all);
+    res.status(200).json({ categoryList: data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ---------- COUNTS ----------
+router.get("/get/count", async (req, res) => {
+  try {
+    const count = await Category.countDocuments({ parentId: undefined });
+    res.json({ categoryCount: count });
+  } catch {
+    res.status(500).json({ success: false });
+  }
+});
+
+router.get("/subCat/get/count", async (req, res) => {
+  try {
+    const list = await Category.find();
+    const sub = list.filter((c) => c.parentId !== undefined);
+    res.json({ categoryCount: sub.length });
+  } catch {
+    res.status(500).json({ success: false });
+  }
+});
+
+// ---------- GET ONE ----------
+router.get("/:id", async (req, res) => {
+  try {
+    const all = await Category.find();
+    const category = await Category.findById(req.params.id);
+    if (!category) return res.status(404).json({ success: false, message: "Category not found" });
+
+    // for GET one, return node + its direct children
+    const siblings = all.filter((c) => String(c.parentId) === String(category._id));
+    const payload = [{
+      _id: category._id,
+      id: category._id,
+      name: category.name,
+      slug: category.slug,
+      color: category.color,
+      images: toImageUrls(category.images),
+      children: siblings.map((s) => ({
+        _id: s._id,
+        id: s._id,
+        name: s.name,
+        slug: s.slug,
+        color: s.color,
+        images: toImageUrls(s.images),
+      })),
+    }];
+
+    res.status(200).json({ categoryData: payload });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ---------- DELETE A SINGLE IMAGE (by filename) ----------
 router.delete("/deleteImage", async (req, res) => {
-  const imgUrl = req.query.img;
+  try {
+    const img = req.query.img; // filename only
+    if (!img) return res.status(400).json({ success: false, message: "img query required" });
 
-  // console.log(imgUrl)
-
-  const urlArr = imgUrl.split("/");
-  const image = urlArr[urlArr.length - 1];
-
-  const imageName = image.split(".")[0];
-
-  const response = await cloudinary.uploader.destroy(
-    imageName,
-    (error, result) => {
-      // console.log(error, res)
+    const filePath = path.join(UPLOAD_DIR, img);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      return res.status(200).json({ success: true, message: "Image deleted" });
     }
-  );
-
-  if (response) {
-    res.status(200).send(response);
+    return res.status(404).json({ success: false, message: "Image not found" });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
+// ---------- DELETE CATEGORY (also removes its images) ----------
 router.delete("/:id", async (req, res) => {
-  const category = await Category.findById(req.params.id);
-  const images = category.images;
+  try {
+    const cat = await Category.findById(req.params.id);
+    if (!cat) return res.status(404).json({ success: false, message: "Category not found" });
 
-  for (img of images) {
-    const imgUrl = img;
-    const urlArr = imgUrl.split("/");
-    const image = urlArr[urlArr.length - 1];
+    // delete local files
+    for (const img of cat.images) {
+      const fp = path.join(UPLOAD_DIR, img);
+      if (fs.existsSync(fp)) fs.unlinkSync(fp);
+    }
 
-    const imageName = image.split(".")[0];
-
-    cloudinary.uploader.destroy(imageName, (error, result) => {
-      // console.log(error, result);
-    });
-    //  console.log(imageName)
+    await Category.findByIdAndDelete(req.params.id);
+    res.status(200).json({ success: true, message: "Category deleted!" });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
-
-  const deletedUser = await Category.findByIdAndDelete(req.params.id);
-
-  if (!deletedUser) {
-    res.status(404).json({
-      message: "Category not found!",
-      success: false,
-    });
-  }
-
-  res.status(200).json({
-    success: true,
-    message: "Category Deleted!",
-  });
 });
 
+// ---------- UPDATE (filenames in req.body.images) ----------
 router.put("/:id", async (req, res) => {
-  
-    
-  const category = await Category.findByIdAndUpdate(
-    req.params.id,
-    {
-      name: req.body.name,
-      images: req.body.images,
-      color: req.body.color,
-    },
-    { new: true }
-  );
+  try {
+    const { name, color, images } = req.body;
+    const updates = {
+      ...(name ? { name, slug: slugify(name, { lower: true, strict: true }) } : {}),
+      ...(typeof color !== "undefined" ? { color } : {}),
+      ...(Array.isArray(images) ? { images } : {}),
+    };
 
-  if (!category) {
-    return res.status(500).json({
-      message: "Category cannot be updated!",
-      success: false,
-    });
+    const category = await Category.findByIdAndUpdate(req.params.id, updates, { new: true });
+    if (!category) return res.status(404).json({ success: false, message: "Category not found" });
+
+    res.json(category);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
-
-  imagesArr = [];
-
-  res.send(category);
 });
 
 module.exports = router;

@@ -6,7 +6,6 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { MyContext } from "../../App";
 import { Link } from "react-router-dom";
 
-import Slider from "react-slick";
 import Skeleton from "@mui/material/Skeleton";
 import { IoIosImages } from "react-icons/io";
 import { fetchDataFromApi, postData } from "../../utils/api";
@@ -21,22 +20,12 @@ const ProductItem = (props) => {
 
   const sliderRef = useRef();
 
-  var settings = {
-    dots: true,
-    infinite: true,
-    loop: true,
-    speed: 200,
-    slidesToShow: 1,
-    slidesToScroll: 1,
-    autoplay: 100,
-  };
-
   const viewProductDetails = (id) => {
     context.openProductDetailsModal(id, true);
   };
 
   const handleMouseEnter = (id) => {
-    if (isLoading === false) {
+    if (!isLoading) {
       setIsHovered(true);
       setTimeout(() => {
         if (sliderRef.current) {
@@ -46,7 +35,6 @@ const ProductItem = (props) => {
     }
 
     const user = JSON.parse(localStorage.getItem("user"));
-
     fetchDataFromApi(
       `/api/my-list?productId=${id}&userId=${user?.userId}`
     ).then((res) => {
@@ -57,7 +45,7 @@ const ProductItem = (props) => {
   };
 
   const handleMouseLeave = () => {
-    if (isLoading === false) {
+    if (!isLoading) {
       setIsHovered(false);
       setTimeout(() => {
         if (sliderRef.current) {
@@ -68,17 +56,15 @@ const ProductItem = (props) => {
   };
 
   useEffect(() => {
-    setTimeout(() => {
-      setIsLoading(false);
-    }, 500);
+    setTimeout(() => setIsLoading(false), 500);
   }, []);
 
   const addToMyList = (id) => {
     const user = JSON.parse(localStorage.getItem("user"));
-    if (user !== undefined && user !== null && user !== "") {
+    if (user) {
       const data = {
         productTitle: props?.item?.name,
-        image: props.item?.images[0],
+        image: props.item?.images?.[0],
         rating: props?.item?.rating,
         price: props?.item?.price,
         productId: id,
@@ -89,7 +75,7 @@ const ProductItem = (props) => {
           context.setAlertBox({
             open: true,
             error: false,
-            msg: "the product added in my list",
+            msg: "The product added to My List",
           });
 
           fetchDataFromApi(
@@ -116,87 +102,50 @@ const ProductItem = (props) => {
     }
   };
 
+  // ✅ Always use plural `/products/:id` and Mongo _id
+  const productId =
+    props?.itemView === "recentlyView"
+      ? props.item?.prodId
+      : props.item?._id;
+
   return (
     <>
       <div
         className={`productItem ${props.itemView}`}
-        onMouseEnter={() =>
-          handleMouseEnter(
-            props?.itemView === "recentlyView"
-              ? props.item?.prodId
-              : props.item?.id
-          )
-        }
+        onMouseEnter={() => handleMouseEnter(productId)}
         onMouseLeave={handleMouseLeave}
-        
       >
         <div className="img_rapper">
-          <Link
-            to={`/product/${
-              props?.itemView === "recentlyView"
-                ? props.item?.prodId
-                : props.item?.id
-            }`}
-          >
+          <Link to={`/products/${productId}`}>
             <div className="productItemSliderWrapper">
+              {isLoading ? (
+                <Skeleton variant="rectangular" width={300} height={400}>
+                  <IoIosImages />
+                </Skeleton>
+              ) : (
+                <img src={props.item?.images?.[0]} className="w-100 img1" />
+              )}
 
-            {isLoading === true ? (
-              <Skeleton variant="rectangular" width={300} height={400}>
-                <IoIosImages />
-              </Skeleton>
-            ) : (
-              <img src={props.item?.images[0]} className="w-100 img1" />
-            )}
-
-            {props.item?.images.length > 1 && (
-              <img src={props.item?.images[1]} className="w-100 img2" />
-            )}
-
-
-              {
-                // isHovered === true &&
-                // <Slider {...settings} ref={sliderRef} className='productItemSlider'>
-                //     {
-                //         props.item?.images?.map((image, index) => {
-                //             return (
-                //                 <div className='slick-slide' key={index}>
-                //                     <img src={image} className="w-100" />
-                //                 </div>
-                //             )
-                //         })
-                //     }
-                // </Slider>
-              }
+              {props.item?.images?.length > 1 && (
+                <img src={props.item?.images?.[1]} className="w-100 img2" />
+              )}
             </div>
-
-            
           </Link>
 
-          <span className="badge badge-primary">{props.item?.discount}%</span>
+          <span className="badge badge-primary">
+            {props.item?.discount}%
+          </span>
+
           <div className="actions">
-            <Button
-              onClick={() =>
-                viewProductDetails(
-                  props?.itemView === "recentlyView"
-                    ? props.item?.prodId
-                    : props.item?.id
-                )
-              }
-            >
+            <Button onClick={() => viewProductDetails(productId)}>
               <TfiFullscreen />
             </Button>
 
             <Button
-              className={isAddedToMyList === true && "active"}
-              onClick={() =>
-                addToMyList(
-                  props?.itemView === "recentlyView"
-                    ? props.item?.prodId
-                    : props.item?.id
-                )
-              }
+              className={isAddedToMyList ? "active" : ""}
+              onClick={() => addToMyList(productId)}
             >
-              {isAddedToMyList === true ? (
+              {isAddedToMyList ? (
                 <FaHeart style={{ fontSize: "20px" }} />
               ) : (
                 <IoMdHeartEmpty style={{ fontSize: "20px" }} />
@@ -206,13 +155,7 @@ const ProductItem = (props) => {
         </div>
 
         <div className="info" title={props?.item?.name}>
-          <Link
-            to={`/product/${
-              props?.itemView === "recentlyView"
-                ? props.item?.prodId
-                : props.item?.id
-            }`}
-          >
+          <Link to={`/products/${productId}`}>
             <h4>{props?.item?.name?.substr(0, 20) + "..."}</h4>
           </Link>
 
@@ -239,8 +182,6 @@ const ProductItem = (props) => {
           </div>
         </div>
       </div>
-
-      {/*<ProductModal/> */}
     </>
   );
 };

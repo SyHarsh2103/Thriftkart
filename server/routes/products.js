@@ -3,884 +3,350 @@ const { Product } = require("../models/products.js");
 const { MyList } = require("../models/myList");
 const { Cart } = require("../models/cart");
 const { RecentlyViewd } = require("../models/recentlyViewd.js");
-const { ImageUpload } = require("../models/imageUpload.js");
 const express = require("express");
 const router = express.Router();
 const multer = require("multer");
 const fs = require("fs");
-const mongoose = require("mongoose");
+const path = require("path");
 
-const cloudinary = require("cloudinary").v2;
+// -------- ENV paths --------
+const UPLOAD_DIR =
+  process.env.PRODUCT_IMAGE_PATH ||
+  path.join(__dirname, "..", "uploads", "products");
 
-cloudinary.config({
-  cloud_name: process.env.cloudinary_Config_Cloud_Name,
-  api_key: process.env.cloudinary_Config_api_key,
-  api_secret: process.env.cloudinary_Config_api_secret,
-  secure: true,
-});
+const BASE_URL = process.env.BASE_URL || "http://localhost:8000";
 
-var imagesArr = [];
+// Ensure upload dir exists
+if (!fs.existsSync(UPLOAD_DIR)) {
+  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+}
 
+// -------- Multer config --------
 const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, "uploads");
-  },
-  filename: function (req, file, cb) {
-    cb(null, `${Date.now()}_${file.originalname}`);
-    //imagesArr.push(`${Date.now()}_${file.originalname}`)
-    //console.log(file.originalname)
-  },
+  destination: (req, file, cb) => cb(null, UPLOAD_DIR),
+  filename: (req, file, cb) =>
+    cb(null, `${Date.now()}_${file.originalname.replace(/\s+/g, "_")}`),
 });
 
-const upload = multer({ storage: storage });
+const fileFilter = (req, file, cb) => {
+  const allowed = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
+  if (allowed.includes(file.mimetype)) return cb(null, true);
+  cb(new Error("Only JPG/PNG/WEBP images allowed"));
+};
 
-router.post(`/upload`, upload.array("images"), async (req, res) => {
-  imagesArr = [];
+const upload = multer({
+  storage,
+  fileFilter,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+});
 
+// -------- Helper --------
+const toImageUrls = (filenames = []) =>
+  filenames.map((name) => `${BASE_URL}/uploads/products/${name}`);
+
+// ---------------- UPLOAD ----------------
+router.post("/upload", (req, res) => {
+  upload.array("images", 10)(req, res, (err) => {
+    if (err) {
+      if (err.code === "LIMIT_FILE_SIZE") {
+        return res
+          .status(400)
+          .json({ success: false, message: "Each file must be ≤ 5 MB" });
+      }
+      return res.status(400).json({ success: false, message: err.message });
+    }
+    const filenames = (req.files || []).map((f) => f.filename);
+    return res.status(200).json(filenames);
+  });
+});
+
+// ---------------- CREATE PRODUCT ----------------
+router.post("/create", async (req, res) => {
   try {
-    for (let i = 0; i < req.files?.length; i++) {
-      const options = {
-        use_filename: true,
-        unique_filename: false,
-        overwrite: false,
-      };
+    const category = await Category.findById(req.body.category);
+    if (!category) {
+      return res.status(404).send("Invalid Category!");
+    }
 
-      const img = await cloudinary.uploader.upload(
-        req.files[i].path,
-        options,
-        function (error, result) {
-          imagesArr.push(result.secure_url);
-          fs.unlinkSync(`uploads/${req.files[i].filename}`);
-        }
+    const product = new Product({
+      ...req.body,
+      images: req.body.images || [], // store filenames
+      location: req.body.location && req.body.location !== "" ? req.body.location : "All",
+    });
+
+    const saved = await product.save();
+    return res.status(201).json(saved);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ---------------- GET ALL PRODUCTS ----------------
+router.get("/", async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const perPage = parseInt(req.query.perPage) || 10;
+    const totalPosts = await Product.countDocuments();
+    const totalPages = Math.ceil(totalPosts / perPage);
+
+    let query = {};
+    if (req.query.catId) query.catId = req.query.catId;
+    if (req.query.subCatId) query.subCatId = req.query.subCatId;
+
+    const products = await Product.find(query)
+      .populate("category")
+      .skip((page - 1) * perPage)
+      .limit(perPage);
+
+    const withUrls = products.map((p) => ({
+      ...p.toObject(),
+      images: toImageUrls(p.images),
+    }));
+
+    res.status(200).json({
+      products: withUrls,
+      totalPages,
+      page,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ---------------- CATEGORY FILTERS ----------------
+router.get("/catName", async (req, res) => {
+  try {
+    const products = await Product.find({ catName: req.query.catName }).populate("category");
+    res.json({
+      products: products.map((p) => ({ ...p.toObject(), images: toImageUrls(p.images) })),
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get("/catId", async (req, res) => {
+  try {
+    const products = await Product.find({ catId: req.query.catId }).populate("category");
+    res.json({
+      products: products.map((p) => ({ ...p.toObject(), images: toImageUrls(p.images) })),
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get("/subCatId", async (req, res) => {
+  try {
+    const products = await Product.find({ subCatId: req.query.subCatId }).populate("category");
+    res.json({
+      products: products.map((p) => ({ ...p.toObject(), images: toImageUrls(p.images) })),
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ---------------- FILTER BY PRICE ----------------
+router.get("/fiterByPrice", async (req, res) => {
+  try {
+    const { minPrice, maxPrice, catId, subCatId } = req.query;
+    let query = {};
+    if (catId) query.catId = catId;
+    if (subCatId) query.subCatId = subCatId;
+
+    let products = await Product.find(query).populate("category");
+
+    products = products.filter((p) => {
+      if (minPrice && p.price < parseInt(minPrice)) return false;
+      if (maxPrice && p.price > parseInt(maxPrice)) return false;
+      return true;
+    });
+
+    res.json(products.map((p) => ({ ...p.toObject(), images: toImageUrls(p.images) })));
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ---------------- FILTER BY RATING ----------------
+router.get("/rating", async (req, res) => {
+  try {
+    const { rating, catId, subCatId } = req.query;
+    let query = { rating };
+    if (catId) query.catId = catId;
+    if (subCatId) query.subCatId = subCatId;
+
+    const products = await Product.find(query).populate("category");
+
+    res.json(products.map((p) => ({ ...p.toObject(), images: toImageUrls(p.images) })));
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ---------------- COUNT ----------------
+router.get("/get/count", async (req, res) => {
+  try {
+    const count = await Product.countDocuments();
+    res.json({ productsCount: count });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ---------------- FEATURED ----------------
+router.get("/featured", async (req, res) => {
+  try {
+    const { location } = req.query;
+    let products = await Product.find({ isFeatured: true }).populate("category");
+
+    if (location && location !== "All") {
+      products = products.filter((p) =>
+        Array.isArray(p.location) ? p.location.some((l) => l.value === location) : p.location === location
       );
     }
 
-    let imagesUploaded = new ImageUpload({
-      images: imagesArr,
+    res.json(products.map((p) => ({ ...p.toObject(), images: toImageUrls(p.images) })));
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ---------------- RECENTLY VIEWED ----------------
+router.get("/recentlyViewd", async (req, res) => {
+  try {
+    const items = await RecentlyViewd.find(req.query).populate("category");
+    res.json(items);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post("/recentlyViewd", async (req, res) => {
+  try {
+    let findProduct = await RecentlyViewd.find({ prodId: req.body.id });
+    if (findProduct.length === 0) {
+      let product = new RecentlyViewd({ ...req.body });
+      product = await product.save();
+      res.status(201).json(product);
+    } else {
+      res.json(findProduct[0]);
+    }
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ---------------- GET PRODUCT BY ID ----------------
+router.get("/:id", async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id).populate("category");
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "The product with given ID not found",
+      });
+    }
+
+    const productObj = product.toObject();
+
+    // convert filenames → URLs if stored locally
+    const imageUrls = Array.isArray(productObj.images)
+      ? productObj.images.map((img) =>
+          img.startsWith("http")
+            ? img // already cloudinary URL
+            : `${process.env.BASE_URL || "http://localhost:8000"}/uploads/products/${img}`
+        )
+      : [];
+
+    res.status(200).json({
+      id: productObj._id,
+      name: productObj.name,
+      description: productObj.description,
+      images: imageUrls,
+      brand: productObj.brand,
+      price: productObj.price,
+      oldPrice: productObj.oldPrice,
+      catId: productObj.catId,
+      catName: productObj.catName,
+      subCatId: productObj.subCatId,
+      subCat: productObj.subCat,
+      subCatName: productObj.subCatName,
+      category: productObj.category,
+      countInStock: productObj.countInStock,
+      rating: productObj.rating,
+      isFeatured: productObj.isFeatured,
+      discount: productObj.discount,
+      productRam: productObj.productRam || [],
+      size: productObj.size || [],
+      productWeight: productObj.productWeight || [],
+      location: productObj.location || [],
     });
-
-    imagesUploaded = await imagesUploaded.save();
-
-    return res.status(200).json(imagesArr);
-  } catch (error) {
-    console.log(error);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
-router.get(`/`, async (req, res) => {
-  const page = parseInt(req.query.page) || 1;
-  const perPage = parseInt(req.query.perPage);
-  const totalPosts = await Product.countDocuments();
-  const totalPages = Math.ceil(totalPosts / perPage);
+// ---------------- DELETE IMAGE ----------------
+router.delete("/deleteImage", async (req, res) => {
+  try {
+    const img = req.query.img; // filename
+    if (!img) return res.status(400).json({ success: false, message: "img query required" });
 
-  if (page > totalPages) {
-    return res.status(404).json({ message: "Page not found" });
-  }
-
-  let productList = [];
-
-  if (req.query.page !== undefined && req.query.perPage !== undefined) {
-    if (req.query.location !== undefined) {
-      const productListArr = await Product.find()
-        .populate("category")
-        .skip((page - 1) * perPage)
-        .limit(perPage)
-        .exec();
-
-      for (let i = 0; i < productListArr.length; i++) {
-        for (let j = 0; j < productListArr[i].location.length; j++) {
-          if (productListArr[i].location[j].value === req.query.location) {
-            productList.push(productListArr[i]);
-          }
-        }
-      }
-    } else {
-      productList = await Product.find()
-        .populate("category")
-        .skip((page - 1) * perPage)
-        .limit(perPage)
-        .exec();
+    const filePath = path.join(UPLOAD_DIR, img);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      return res.json({ success: true, message: "Image deleted" });
     }
-  } else {
-    productList = await Product.find();
-  }
-  return res.status(200).json({
-    products: productList,
-    totalPages: totalPages,
-    page: page,
-  });
-});
-
-router.get(`/catName`, async (req, res) => {
-  let productList = [];
-
-  const page = parseInt(req.query.page) || 1;
-  const perPage = parseInt(req.query.perPage);
-  const totalPosts = await Product.countDocuments();
-  const totalPages = Math.ceil(totalPosts / perPage);
-
-  if (page > totalPages) {
-    return res.status(404).json({ message: "Page not found" });
-  }
-
-  if (req.query.page !== undefined && req.query.perPage !== undefined) {
-    const productListArr = await Product.find({ catName: req.query.catName })
-      .populate("category")
-      .skip((page - 1) * perPage)
-      .limit(perPage)
-      .exec();
-
-    return res.status(200).json({
-      products: productListArr,
-      totalPages: totalPages,
-      page: page,
-    });
-  } else {
-    const productListArr = await Product.find({ catName: req.query.catName })
-      .populate("category")
-      .skip((page - 1) * perPage)
-      .limit(perPage)
-      .exec();
-
-    for (let i = 0; i < productListArr.length; i++) {
-      for (let j = 0; j < productListArr[i].location.length; j++) {
-        if (productListArr[i].location[j].value === req.query.location) {
-          productList.push(productListArr[i]);
-        }
-      }
-    }
-
-    if (req.query.location !== "All") {
-      return res.status(200).json({
-        products: productList,
-        totalPages: totalPages,
-        page: page,
-      });
-    } else {
-      return res.status(200).json({
-        products: productListArr,
-        totalPages: totalPages,
-        page: page,
-      });
-    }
+    res.status(404).json({ success: false, message: "Image not found" });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
-router.get(`/catId`, async (req, res) => {
-  let productList = [];
-  let productListArr = [];
+// ---------------- DELETE PRODUCT ----------------
+router.delete("/:id", async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
+    if (!product)
+      return res.status(404).json({ success: false, message: "Product not found" });
 
-  const page = parseInt(req.query.page) || 1;
-  const perPage = parseInt(req.query.perPage);
-  const totalPosts = await Product.countDocuments();
-  const totalPages = Math.ceil(totalPosts / perPage);
-
-  if (page > totalPages) {
-    return res.status(404).json({ message: "Page not found" });
-  }
-
-  if (req.query.page !== undefined && req.query.perPage !== undefined) {
-    const productListArr = await Product.find({ catId: req.query.catId })
-      .populate("category")
-      .skip((page - 1) * perPage)
-      .limit(perPage)
-      .exec();
-
-    return res.status(200).json({
-      products: productListArr,
-      totalPages: totalPages,
-      page: page,
-    });
-  } else {
-    productListArr = await Product.find({ catId: req.query.catId });
-
-    for (let i = 0; i < productListArr.length; i++) {
-      //console.log(productList[i].location)
-      for (let j = 0; j < productListArr[i].location.length; j++) {
-        if (productListArr[i].location[j].value === req.query.location) {
-          productList.push(productListArr[i]);
-        }
-      }
+    // delete local images
+    for (const img of product.images) {
+      const filePath = path.join(UPLOAD_DIR, img);
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
     }
 
-    if (req.query.location !== "All" && req.query.location!==undefined) {
-      return res.status(200).json({
-        products: productList,
-        totalPages: totalPages,
-        page: page,
-      });
-    } else {
-      return res.status(200).json({
-        products: productListArr,
-        totalPages: totalPages,
-        page: page,
-      });
-    }
+    await Product.findByIdAndDelete(req.params.id);
+    await MyList.deleteMany({ productId: req.params.id });
+    await Cart.deleteMany({ productId: req.params.id });
 
-
-   
-
+    res.json({ success: true, message: "Product deleted" });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
-router.get(`/subCatId`, async (req, res) => {
-  let productList = [];
-
-  const page = parseInt(req.query.page) || 1;
-  const perPage = parseInt(req.query.perPage);
-  const totalPosts = await Product.countDocuments();
-  const totalPages = Math.ceil(totalPosts / perPage);
-
-  if (page > totalPages) {
-    return res.status(404).json({ message: "Page not found" });
-  }
-
-  if (req.query.page !== undefined && req.query.perPage !== undefined) {
-    const productListArr = await Product.find({ subCatId: req.query.subCatId })
-      .populate("category")
-      .skip((page - 1) * perPage)
-      .limit(perPage)
-      .exec();
-
-    return res.status(200).json({
-      products: productListArr,
-      totalPages: totalPages,
-      page: page,
-    });
-  } else {
-    const productListArr = await Product.find({ subCatId: req.query.subCatId });
-
-    for (let i = 0; i < productListArr.length; i++) {
-      //console.log(productList[i].location)
-      for (let j = 0; j < productListArr[i].location.length; j++) {
-        if (productListArr[i].location[j].value === req.query.location) {
-          productList.push(productListArr[i]);
-        }
-      }
-    }
-
-    if (req.query.location !== "All") {
-      return res.status(200).json({
-        products: productList,
-        totalPages: totalPages,
-        page: page,
-      });
-    } else {
-      return res.status(200).json({
-        products: productListArr,
-        totalPages: totalPages,
-        page: page,
-      });
-    }
-  }
-});
-
-router.get(`/fiterByPrice`, async (req, res) => {
-  let productList = [];
-
-  if (req.query.catId !== "" && req.query.catId !== undefined) {
-    const productListArr = await Product.find({
-      catId: req.query.catId,
-    }).populate("category");
-
-    if (req.query.location !== "All") {
-      for (let i = 0; i < productListArr.length; i++) {
-        //console.log(productList[i].location)
-        for (let j = 0; j < productListArr[i].location.length; j++) {
-          if (productListArr[i].location[j].value === req.query.location) {
-            productList.push(productListArr[i]);
-          }
-        }
-      }
-    } else {
-      productList = productListArr;
-    }
-  } else if (req.query.subCatId !== "" && req.query.subCatId !== undefined) {
-    const productListArr = await Product.find({
-      subCatId: req.query.subCatId,
-    }).populate("category");
-
-    if (req.query.location !== "All") {
-      for (let i = 0; i < productListArr.length; i++) {
-        //console.log(productList[i].location)
-        for (let j = 0; j < productListArr[i].location.length; j++) {
-          if (productListArr[i].location[j].value === req.query.location) {
-            productList.push(productListArr[i]);
-          }
-        }
-      }
-    } else {
-      productList = productListArr;
-    }
-  }
-
-  const filteredProducts = productList.filter((product) => {
-    if (req.query.minPrice && product.price < parseInt(+req.query.minPrice)) {
-      return false;
-    }
-    if (req.query.maxPrice && product.price > parseInt(+req.query.maxPrice)) {
-      return false;
-    }
-    return true;
-  });
-
-  return res.status(200).json({
-    products: filteredProducts,
-    totalPages: 0,
-    page: 0,
-  });
-});
-
-router.get(`/rating`, async (req, res) => {
-  let productList = [];
-
-  if (req.query.catId !== "" && req.query.catId !== undefined) {
-    const productListArr = await Product.find({
-      catId: req.query.catId,
-      rating: req.query.rating,
-    }).populate("category");
-
-    if (req.query.location !== "All") {
-      for (let i = 0; i < productListArr.length; i++) {
-        //console.log(productList[i].location)
-        for (let j = 0; j < productListArr[i].location.length; j++) {
-          if (productListArr[i].location[j].value === req.query.location) {
-            productList.push(productListArr[i]);
-          }
-        }
-      }
-    } else {
-      productList = productListArr;
-    }
-  } else if (req.query.subCatId !== "" && req.query.subCatId !== undefined) {
-    const productListArr = await Product.find({
-      subCatId: req.query.subCatId,
-      rating: req.query.rating,
-    }).populate("category");
-
-    if (req.query.location !== "All") {
-      for (let i = 0; i < productListArr.length; i++) {
-        //console.log(productList[i].location)
-        for (let j = 0; j < productListArr[i].location.length; j++) {
-          if (productListArr[i].location[j].value === req.query.location) {
-            productList.push(productListArr[i]);
-          }
-        }
-      }
-    } else {
-      productList = productListArr;
-    }
-  }
-
-  return res.status(200).json({
-    products: productList,
-    totalPages: 0,
-    page: 0,
-  });
-});
-
-router.get(`/get/count`, async (req, res) => {
-  const productsCount = await Product.countDocuments();
-
-  if (!productsCount) {
-    res.status(500).json({ success: false });
-  } else {
-    res.send({
-      productsCount: productsCount,
-    });
-  }
-});
-
-router.get(`/featured`, async (req, res) => {
-  let productList = [];
-  if (req.query.location !== undefined && req.query.location !== null) {
-    const productListArr = await Product.find({ isFeatured: true }).populate(
-      "category"
+// ---------------- UPDATE PRODUCT ----------------
+router.put("/:id", async (req, res) => {
+  try {
+    const updated = await Product.findByIdAndUpdate(
+      req.params.id,
+      {
+        ...req.body,
+        ...(Array.isArray(req.body.images) ? { images: req.body.images } : {}),
+      },
+      { new: true }
     );
 
-    for (let i = 0; i < productListArr.length; i++) {
-      for (let j = 0; j < productListArr[i].location.length; j++) {
-        if (productListArr[i].location[j].value === req.query.location) {
-          productList.push(productListArr[i]);
-        }
-      }
-    }
-  } else {
-    productList = await Product.find({ isFeatured: true }).populate("category");
-  }
+    if (!updated)
+      return res.status(404).json({ success: false, message: "Product not found" });
 
-  if (!productList) {
-    res.status(500).json({ success: false });
-  }
-
-  return res.status(200).json(productList);
-});
-
-router.get(`/recentlyViewd`, async (req, res) => {
-  let productList = [];
-  productList = await RecentlyViewd.find(req.query).populate("category");
-
-  if (!productList) {
-    res.status(500).json({ success: false });
-  }
-
-  return res.status(200).json(productList);
-});
-
-router.post(`/recentlyViewd`, async (req, res) => {
-  let findProduct = await RecentlyViewd.find({ prodId: req.body.id });
-
-  var product;
-
-  if (findProduct.length === 0) {
-    product = new RecentlyViewd({
-      prodId: req.body.id,
-      name: req.body.name,
-      description: req.body.description,
-      images: req.body.images,
-      brand: req.body.brand,
-      price: req.body.price,
-      oldPrice: req.body.oldPrice,
-      subCatId: req.body.subCatId,
-      catName: req.body.catName,
-      subCat: req.body.subCat,
-      category: req.body.category,
-      countInStock: req.body.countInStock,
-      rating: req.body.rating,
-      isFeatured: req.body.isFeatured,
-      discount: req.body.discount,
-      productRam: req.body.productRam,
-      size: req.body.size,
-      productWeight: req.body.productWeight,
-    });
-
-    product = await product.save();
-
-    if (!product) {
-      res.status(500).json({
-        error: err,
-        success: false,
-      });
-    }
-
-    res.status(201).json(product);
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
-
-router.post(`/create`, async (req, res) => {
-  const category = await Category.findById(req.body.category);
-  if (!category) {
-    return res.status(404).send("invalid Category!");
-  }
-
-  const images_Array = [];
-  const uploadedImages = await ImageUpload.find();
-
-  const images_Arr = uploadedImages?.map((item) => {
-    item.images?.map((image) => {
-      images_Array.push(image);
-      console.log(image);
-    });
-  });
-
-  product = new Product({
-    name: req.body.name,
-    description: req.body.description,
-    images: images_Array,
-    brand: req.body.brand,
-    price: req.body.price,
-    oldPrice: req.body.oldPrice,
-    catId: req.body.catId,
-    catName: req.body.catName,
-    subCat: req.body.subCat,
-    subCatId: req.body.subCatId,
-    subCatName: req.body.subCatName,
-    category: req.body.category,
-    countInStock: req.body.countInStock,
-    rating: req.body.rating,
-    isFeatured: req.body.isFeatured,
-    discount: req.body.discount,
-    productRam: req.body.productRam,
-    size: req.body.size,
-    productWeight: req.body.productWeight,
-    location: req.body.location !== "" ? req.body.location : "All",
-  });
-
-  product = await product.save();
-
-  if (!product) {
-    res.status(500).json({
-      error: err,
-      success: false,
-    });
-  }
-
-  imagesArr = [];
-
-  res.status(201).json(product);
-});
-
-router.get("/:id", async (req, res) => {
-  productEditId = req.params.id;
-
-  const product = await Product.findById(req.params.id).populate("category");
-
-  if (!product) {
-    res
-      .status(500)
-      .json({ message: "The product with the given ID was not found." });
-  }
-  return res.status(200).send(product);
-});
-
-router.delete("/deleteImage", async (req, res) => {
-  const imgUrl = req.query.img;
-
-  // console.log(imgUrl)
-
-  const urlArr = imgUrl.split("/");
-  const image = urlArr[urlArr.length - 1];
-
-  const imageName = image.split(".")[0];
-
-  const response = await cloudinary.uploader.destroy(
-    imageName,
-    (error, result) => {}
-  );
-
-  if (response) {
-    res.status(200).send(response);
-  }
-});
-
-router.delete("/:id", async (req, res) => {
-  const product = await Product.findById(req.params.id);
-  const images = product.images;
-
-  for (img of images) {
-    const imgUrl = img;
-    const urlArr = imgUrl.split("/");
-    const image = urlArr[urlArr.length - 1];
-
-    const imageName = image.split(".")[0];
-
-    if (imageName) {
-      cloudinary.uploader.destroy(imageName, (error, result) => {
-        // console.log(error, result);
-      });
-    }
-
-    //  console.log(imageName)
-  }
-
-  const deletedProduct = await Product.findByIdAndDelete(req.params.id);
-
-  const myListItems = await MyList.find({ productId: req.params.id });
-
-  for (var i = 0; i < myListItems.length; i++) {
-    await MyList.findByIdAndDelete(myListItems[i].id);
-  }
-
-  const cartItems = await Cart.find({ productId: req.params.id });
-
-  for (var i = 0; i < cartItems.length; i++) {
-    await Cart.findByIdAndDelete(cartItems[i].id);
-  }
-
-  if (!deletedProduct) {
-    res.status(404).json({
-      message: "Product not found!",
-      success: false,
-    });
-  }
-
-  res.status(200).json({
-    success: true,
-    message: "Product Deleted!",
-  });
-});
-
-router.put("/:id", async (req, res) => {
-  const product = await Product.findByIdAndUpdate(
-    req.params.id,
-    {
-      name: req.body.name,
-      subCat: req.body.subCat,
-      description: req.body.description,
-      images: req.body.images,
-      brand: req.body.brand,
-      price: req.body.price,
-      oldPrice: req.body.oldPrice,
-      catId: req.body.catId,
-      subCat: req.body.subCat,
-      subCatId: req.body.subCatId,
-      subCatName: req.body.subCatName,
-      catName: req.body.catName,
-      category: req.body.category,
-      countInStock: req.body.countInStock,
-      rating: req.body.rating,
-      numReviews: req.body.numReviews,
-      isFeatured: req.body.isFeatured,
-      productRam: req.body.productRam,
-      size: req.body.size,
-      productWeight: req.body.productWeight,
-      location: req.body.location,
-    },
-    { new: true }
-  );
-
-  if (!product) {
-    res.status(404).json({
-      message: "the product can not be updated!",
-      status: false,
-    });
-  }
-
-  imagesArr = [];
-
-  res.status(200).json({
-    message: "the product is updated!",
-    status: true,
-  });
-
-  //res.send(product);
-});
-
-// router.get(`/`, async (req, res) => {
-//   const page = parseInt(req.query.page) || 1;
-//   const perPage = parseInt(req.query.perPage);
-//   const totalPosts = await Product.countDocuments();
-//   const totalPages = Math.ceil(totalPosts / perPage);
-
-//   if (page > totalPages) {
-//     return res.status(404).json({ message: "Page not found" });
-//   }
-
-//   let productList = [];
-
-//   if (req.query.minPrice !== undefined && req.query.maxPrice !== undefined) {
-//     if (
-//       req.query.subCatId !== undefined &&
-//       req.query.subCatId !== null &&
-//       req.query.subCatId !== ""
-//     ) {
-//       if (
-//         req.query.location !== undefined &&
-//         req.query.location !== null &&
-//         req.query.location !== "All"
-//       ) {
-//         productList = await Product.find({
-//           subCatId: req.query.subCatId,
-//           location: req.query.location,
-//         })
-//           .populate("category")
-//           .skip((page - 1) * perPage)
-//           .limit(perPage)
-//           .exec();
-//       } else {
-//         productList = await Product.find({
-//           subCatId: req.query.subCatId,
-//         })
-//           .populate("category")
-//           .skip((page - 1) * perPage)
-//           .limit(perPage)
-//           .exec();
-//       }
-//     }
-
-//     if (
-//       req.query.catId !== undefined &&
-//       req.query.catId !== null &&
-//       req.query.catId !== ""
-//     ) {
-//       if (
-//         req.query.location !== undefined &&
-//         req.query.location !== null &&
-//         req.query.location !== "All"
-//       ) {
-//         productList = await Product.find({
-//           catId: req.query.catId,
-//           location: req.query.location,
-//         })
-//           .populate("category")
-//           .skip((page - 1) * perPage)
-//           .limit(perPage)
-//           .exec();
-//       } else {
-//         productList = await Product.find({ catId: req.query.catId })
-//           .populate("category")
-//           .skip((page - 1) * perPage)
-//           .limit(perPage)
-//           .exec();
-//       }
-//     }
-
-//     const filteredProducts = productList.filter((product) => {
-//       if (req.query.minPrice && product.price < parseInt(+req.query.minPrice)) {
-//         return false;
-//       }
-//       if (req.query.maxPrice && product.price > parseInt(+req.query.maxPrice)) {
-//         return false;
-//       }
-//       return true;
-//     });
-
-//     if (!productList) {
-//       res.status(500).json({ success: false });
-//     }
-//     return res.status(200).json({
-//       products: filteredProducts,
-//       totalPages: totalPages,
-//       page: page,
-//     });
-//   } else if (req.query.page !== undefined && req.query.perPage !== undefined) {
-//     if (
-//       req.query.location !== undefined &&
-//       req.query.location !== null &&
-//       req.query.location !== "All"
-//     ) {
-//       productList = await Product.find({ location: req.query.location })
-//         .populate("category")
-//         .skip((page - 1) * perPage)
-//         .limit(perPage)
-//         .exec();
-//     } else {
-//       productList = await Product.find()
-//         .populate("category")
-//         .skip((page - 1) * perPage)
-//         .limit(perPage)
-//         .exec();
-//     }
-
-//     if (!productList) {
-//       res.status(500).json({ success: false });
-//     }
-//     return res.status(200).json({
-//       products: productList,
-//       totalPages: totalPages,
-//       page: page,
-//     });
-//   } else {
-//     if (
-//       req.query.location !== undefined &&
-//       req.query.location !== null &&
-//       req.query.location !== "All"
-//     ) {
-//       productList = await Product.find(req.query)
-//         .populate("category")
-//         .skip((page - 1) * perPage)
-//         .limit(perPage)
-//         .exec();
-//     } else if (
-//       req.query.catId !== "" &&
-//       req.query.catId !== null &&
-//       req.query.catId !== undefined
-//     ) {
-//       productList = await Product.find({ catId: req.query.catId })
-//         .populate("category")
-//         .skip((page - 1) * perPage)
-//         .limit(perPage)
-//         .exec();
-//     } else if (
-//       req.query.catName !== "" &&
-//       req.query.catName !== null &&
-//       req.query.catName !== undefined
-//     ) {
-//       productList = await Product.find({ catName: req.query.catName })
-//         .populate("category")
-//         .skip((page - 1) * perPage)
-//         .limit(perPage)
-//         .exec();
-//     } else if (
-//       req.query.subCatId !== "" &&
-//       req.query.subCatId !== null &&
-//       req.query.subCatId !== undefined
-//     ) {
-//       productList = await Product.find({
-//         subCatId: req.query.subCatId,
-//       })
-//         .populate("category")
-//         .skip((page - 1) * perPage)
-//         .limit(perPage)
-//         .exec();
-//     }
-
-//     if (
-//       req.query.rating !== "" &&
-//       req.query.rating !== null &&
-//       req.query.rating !== undefined
-//     ) {
-//       if (
-//         req.query.catId !== "" &&
-//         req.query.catId !== null &&
-//         req.query.catId !== undefined
-//       ) {
-//         if (
-//           req.query.location !== undefined &&
-//           req.query.location !== null &&
-//           req.query.location !== "All"
-//         ) {
-//           productList = await Product.find({
-//             rating: req.query.rating,
-//             catId: req.query.catId,
-//             location: req.query.location,
-//           }).populate("category").skip((page - 1) * perPage)
-//           .limit(perPage)
-//           .exec();
-//         } else {
-//           productList = await Product.find({
-//             rating: req.query.rating,
-//             catId: req.query.catId,
-//           }).populate("category").skip((page - 1) * perPage)
-//           .limit(perPage)
-//           .exec();
-//         }
-//       }
-//     }
-
-//     if (
-//       req.query.rating !== "" &&
-//       req.query.rating !== null &&
-//       req.query.rating !== undefined
-//     ) {
-//       if (
-//         req.query.subCatId !== "" &&
-//         req.query.subCatId !== null &&
-//         req.query.subCatId !== undefined
-//       ) {
-//         if (
-//           req.query.location !== undefined &&
-//           req.query.location !== null &&
-//           req.query.location !== "All"
-//         ) {
-//           productList = await Product.find({
-//             rating: req.query.rating,
-//             subCatId: req.query.subCatId,
-//             location: req.query.location,
-//           }).populate("category").skip((page - 1) * perPage)
-//           .limit(perPage)
-//           .exec();
-//         } else {
-//           productList = await Product.find({
-//             rating: req.query.rating,
-//             subCatId: req.query.subCatId,
-//           }).populate("category").skip((page - 1) * perPage)
-//           .limit(perPage)
-//           .exec();
-//         }
-//       }
-//     }
-
-//     if (!productList) {
-//       res.status(500).json({ success: false });
-//     }
-
-//     return res.status(200).json({
-//       products: productList,
-//       totalPages: totalPages,
-//       page: page,
-//     });
-//   }
-// });
 
 module.exports = router;

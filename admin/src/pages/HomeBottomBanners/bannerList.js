@@ -1,27 +1,20 @@
 import React, { useContext, useEffect, useState } from "react";
 import Button from "@mui/material/Button";
-
 import { FaPencilAlt } from "react-icons/fa";
 import { MdDelete } from "react-icons/md";
-import Pagination from "@mui/material/Pagination";
 import { MyContext } from "../../App";
-
 import { Link } from "react-router-dom";
-
 import { emphasize, styled } from "@mui/material/styles";
 import Breadcrumbs from "@mui/material/Breadcrumbs";
 import Chip from "@mui/material/Chip";
 import HomeIcon from "@mui/icons-material/Home";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-
 import { LazyLoadImage } from "react-lazy-load-image-component";
 import "react-lazy-load-image-component/src/effects/blur.css";
 
-import { deleteData, editData, fetchDataFromApi } from "../../utils/api";
+import { deleteData, fetchDataFromApi } from "../../utils/api";
 
-const label = { inputProps: { "aria-label": "Checkbox demo" } };
-
-//breadcrumb code
+// ---------- breadcrumb style ----------
 const StyledBreadcrumb = styled(Chip)(({ theme }) => {
   const backgroundColor =
     theme.palette.mode === "light"
@@ -43,129 +36,138 @@ const StyledBreadcrumb = styled(Chip)(({ theme }) => {
 });
 
 const BannersList = () => {
-  const [slideList, setSlideList] = useState([]);
-
+  const [bannerList, setBannerList] = useState([]);
   const context = useContext(MyContext);
+
+  // -------- fetch banners --------
+  const loadBanners = async () => {
+    context.setProgress(20);
+    const res = await fetchDataFromApi("/api/homeBottomBanners");
+    if (Array.isArray(res)) {
+      // normalize so each item has id = _id
+      const normalized = res.map((b) => ({
+        ...b,
+        id: b._id,
+      }));
+      setBannerList(normalized);
+    }
+    context.setProgress(100);
+  };
 
   useEffect(() => {
     window.scrollTo(0, 0);
-    context.setProgress(20);
-    fetchDataFromApi("/api/homeBottomBanners").then((res) => {
-      setSlideList(res);
-      context.setProgress(100);
-    });
+    loadBanners();
   }, []);
 
-  const deleteSlide = (id) => {
+  // -------- delete banner --------
+  const deleteBanner = async (id) => {
     context.setProgress(30);
-    deleteData(`/api/homeBottomBanners/${id}`).then((res) => {
-      context.setProgress(100);
-      context.setProgress({
-        open: true,
-        error: false,
-        msg: "Banner Deleted!",
-      });
-      fetchDataFromApi("/api/homeBottomBanners").then((res) => {
-        setSlideList(res);
-        context.setProgress(100);
-      });
+    await deleteData(`/api/homeBottomBanners/${id}`);
+    context.setProgress(100);
+
+    context.setAlertBox({
+      open: true,
+      error: false,
+      msg: "Banner Deleted!",
     });
+
+    loadBanners();
   };
 
   return (
-    <>
-      <div className="right-content w-100">
-        <div className="card shadow border-0 w-100 flex-row p-4 align-items-center">
-          <h5 className="mb-0">Home Bottom Banner List</h5>
+    <div className="right-content w-100">
+      <div className="card shadow border-0 w-100 flex-row p-4 align-items-center">
+        <h5 className="mb-0">Home Bottom Banner List</h5>
 
-          <div className="ml-auto d-flex align-items-center">
-            <Breadcrumbs
-              aria-label="breadcrumb"
-              className="ml-auto breadcrumbs_"
-            >
-              <StyledBreadcrumb
-                component="a"
-                href="#"
-                label="Dashboard"
-                icon={<HomeIcon fontSize="small" />}
-              />
+        <div className="ml-auto d-flex align-items-center">
+          <Breadcrumbs aria-label="breadcrumb" className="ml-auto breadcrumbs_">
+            <StyledBreadcrumb
+              component="a"
+              href="#"
+              label="Dashboard"
+              icon={<HomeIcon fontSize="small" />}
+            />
 
-              <StyledBreadcrumb
-                label="Banners"
-                deleteIcon={<ExpandMoreIcon />}
-              />
-            </Breadcrumbs>
+            <StyledBreadcrumb
+              label="Banners"
+              deleteIcon={<ExpandMoreIcon />}
+            />
+          </Breadcrumbs>
 
-            <Link to="/homeBottomBanners/add">
-              <Button className="btn-blue  ml-3 pl-3 pr-3">
-                Add Home Bottom Banner
-              </Button>
-            </Link>
-          </div>
-        </div>
-
-        <div className="card shadow border-0 p-3 mt-4">
-          <div className="table-responsive mt-3">
-            <table className="table table-bordered table-striped v-align">
-              <thead className="thead-dark">
-                <tr>
-                  <th style={{ width: "200px" }}>IMAGE</th>
-                  <th>ACTION</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {slideList?.length !== 0 &&
-                  slideList?.map((item, index) => {
-                    return (
-                      <tr>
-                        <td>
-                          <div
-                            className="d-flex align-items-center "
-                            style={{ width: "200px" }}
-                          >
-                            <div
-                              className="imgWrapper h-auto"
-                              style={{ width: "200px", flex: "0 0 200px" }}
-                            >
-                              <div className="img card shadow m-0 h-auto">
-                                <LazyLoadImage
-                                  alt={"image"}
-                                  effect="blur"
-                                  className="w-100"
-                                  src={item.images[0]}
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-
-                        <td>
-                          <div className="actions d-flex align-items-center">
-                            <Link to={`/homeBottomBanners/edit/${item.id}`}>
-                              <Button className="success" color="success">
-                                <FaPencilAlt />
-                              </Button>
-                            </Link>
-
-                            <Button
-                              className="error"
-                              color="error"
-                              onClick={() => deleteSlide(item.id)}
-                            >
-                              <MdDelete />
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-              </tbody>
-            </table>
-          </div>
+          <Link to="/homeBottomBanners/add">
+            <Button className="btn-blue ml-3 pl-3 pr-3">
+              Add Home Bottom Banner
+            </Button>
+          </Link>
         </div>
       </div>
-    </>
+
+      <div className="card shadow border-0 p-3 mt-4">
+        <div className="table-responsive mt-3">
+          <table className="table table-bordered table-striped v-align">
+            <thead className="thead-dark">
+              <tr>
+                <th style={{ width: "200px" }}>IMAGE</th>
+                <th>ACTION</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {bannerList?.length > 0 ? (
+                bannerList.map((item) => (
+                  <tr key={item._id}>
+                    <td>
+                      <div
+                        className="d-flex align-items-center"
+                        style={{ width: "200px" }}
+                      >
+                        <div
+                          className="imgWrapper h-auto"
+                          style={{ width: "200px", flex: "0 0 200px" }}
+                        >
+                          <div className="img card shadow m-0 h-auto">
+                            <LazyLoadImage
+                              alt="image"
+                              effect="blur"
+                              className="w-100"
+                              src={item.images?.[0]}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+
+                    <td>
+                      <div className="actions d-flex align-items-center">
+                        <Link to={`/homeBottomBanners/edit/${item._id}`}>
+                          <Button className="success" color="success">
+                            <FaPencilAlt />
+                          </Button>
+                        </Link>
+
+                        <Button
+                          className="error"
+                          color="error"
+                          onClick={() => deleteBanner(item._id)}
+                        >
+                          <MdDelete />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="2" className="text-center">
+                    No banners found
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   );
 };
 
