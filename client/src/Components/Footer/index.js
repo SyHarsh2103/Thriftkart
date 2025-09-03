@@ -52,7 +52,7 @@ const Footer = () => {
               <span>
                 <LuShirt />
               </span>
-              <span className="ml-2">Everyday fresh products</span>
+              <span className="ml-2">Everyday products</span>
             </div>
 
             <div className="col d-flex align-items-center">
@@ -78,141 +78,72 @@ const Footer = () => {
           </div>
 
           <div className="row mt-5 linksWrap">
-            <div className="col">
-              <h5>FRUIT & VEGETABLES</h5>
-              <ul>
-                <li>
-                  <Link to="#">Fresh Vegetables</Link>
-                </li>
-                <li>
-                  <Link to="#">Herbs & Seasonings</Link>
-                </li>
-                <li>
-                  <Link to="#">Fresh Fruits</Link>
-                </li>
-                <li>
-                  <Link to="#">Cuts & Sprouts</Link>
-                </li>
-                <li>
-                  <Link to="#">Exotic Fruits & Veggies</Link>
-                </li>
-                <li>
-                  <Link to="#">Packaged Produce</Link>
-                </li>
-                <li>
-                  <Link to="#">Party Trays</Link>
-                </li>
-              </ul>
-            </div>
+  <div className="col">
+    <h5>CLOTHING</h5>
+    <ul>
+      <li><Link to="#">Men's Wear</Link></li>
+      <li><Link to="#">Women's Wear</Link></li>
+      <li><Link to="#">Kids' Wear</Link></li>
+      <li><Link to="#">Ethnic & Traditional</Link></li>
+      <li><Link to="#">Casual & Formal</Link></li>
+      <li><Link to="#">Sportswear</Link></li>
+      <li><Link to="#">Accessories</Link></li>
+    </ul>
+  </div>
 
-            <div className="col">
-              <h5>BREAKFAST & DAIRY</h5>
-              <ul>
-                <li>
-                  <Link to="#">Fresh Vegetables</Link>
-                </li>
-                <li>
-                  <Link to="#">Herbs & Seasonings</Link>
-                </li>
-                <li>
-                  <Link to="#">Fresh Fruits</Link>
-                </li>
-                <li>
-                  <Link to="#">Cuts & Sprouts</Link>
-                </li>
-                <li>
-                  <Link to="#">Exotic Fruits & Veggies</Link>
-                </li>
-                <li>
-                  <Link to="#">Packaged Produce</Link>
-                </li>
-                <li>
-                  <Link to="#">Party Trays</Link>
-                </li>
-              </ul>
-            </div>
+  <div className="col">
+    <h5>MOBILE ACCESSORIES</h5>
+    <ul>
+      <li><Link to="#">Phone Cases</Link></li>
+      <li><Link to="#">Chargers & Cables</Link></li>
+      <li><Link to="#">Power Banks</Link></li>
+      <li><Link to="#">Earphones & Headphones</Link></li>
+      <li><Link to="#">Screen Protectors</Link></li>
+      <li><Link to="#">Smartwatches</Link></li>
+      <li><Link to="#">Car Accessories</Link></li>
+    </ul>
+  </div>
 
-            <div className="col">
-              <h5>MEAT & SEAFOOD</h5>
-              <ul>
-                <li>
-                  <Link to="#">Fresh Vegetables</Link>
-                </li>
-                <li>
-                  <Link to="#">Herbs & Seasonings</Link>
-                </li>
-                <li>
-                  <Link to="#">Fresh Fruits</Link>
-                </li>
-                <li>
-                  <Link to="#">Cuts & Sprouts</Link>
-                </li>
-                <li>
-                  <Link to="#">Exotic Fruits & Veggies</Link>
-                </li>
-                <li>
-                  <Link to="#">Packaged Produce</Link>
-                </li>
-                <li>
-                  <Link to="#">Party Trays</Link>
-                </li>
-              </ul>
-            </div>
+  <div className="col">
+    <h5>ELECTRONICS</h5>
+    <ul>
+      <li><Link to="#">Laptops & Computers</Link></li>
+      <li><Link to="#">Smartphones</Link></li>
+      <li><Link to="#">Televisions</Link></li>
+      <li><Link to="#">Cameras</Link></li>
+      <li><Link to="#">Home Appliances</Link></li>
+      <li><Link to="#">Audio Systems</Link></li>
+      <li><Link to="#">Gaming Consoles</Link></li>
+    </ul>
+  </div>
 
-            <div className="col">
-              <h5>BEVERAGES</h5>
-              <ul>
-                <li>
-                  <Link to="#">Fresh Vegetables</Link>
-                </li>
-                <li>
-                  <Link to="#">Herbs & Seasonings</Link>
-                </li>
-                <li>
-                  <Link to="#">Fresh Fruits</Link>
-                </li>
-                <li>
-                  <Link to="#">Cuts & Sprouts</Link>
-                </li>
-                <li>
-                  <Link to="#">Exotic Fruits & Veggies</Link>
-                </li>
-                <li>
-                  <Link to="#">Packaged Produce</Link>
-                </li>
-                <li>
-                  <Link to="#">Party Trays</Link>
-                </li>
-              </ul>
-            </div>
+  <div className="col">
+    <h5>HOME LIGHTING</h5>
+    <ul>
+      <li><Link to="#">LED Bulbs</Link></li>
+      <li><Link to="#">Ceiling Lights</Link></li>
+      <li><Link to="#">Wall Lamps</Link></li>
+      <li><Link to="#">Table Lamps</Link></li>
+      <li><Link to="#">Decorative Lights</Link></li>
+      <li><Link to="#">Outdoor Lighting</Link></li>
+      <li><Link to="#">Smart Lighting</Link></li>
+    </ul>
+  </div>
 
-            <div className="col">
-              <h5>BREADS & BAKERY</h5>
-              <ul>
-                <li>
-                  <Link to="#">Fresh Vegetables</Link>
-                </li>
-                <li>
-                  <Link to="#">Herbs & Seasonings</Link>
-                </li>
-                <li>
-                  <Link to="#">Fresh Fruits</Link>
-                </li>
-                <li>
-                  <Link to="#">Cuts & Sprouts</Link>
-                </li>
-                <li>
-                  <Link to="#">Exotic Fruits & Veggies</Link>
-                </li>
-                <li>
-                  <Link to="#">Packaged Produce</Link>
-                </li>
-                <li>
-                  <Link to="#">Party Trays</Link>
-                </li>
-              </ul>
-            </div>
-          </div>
+  <div className="col">
+    <h5>HANDICRAFTS</h5>
+    <ul>
+      <li><Link to="#">Wooden Handicrafts</Link></li>
+      <li><Link to="#">Metal Art</Link></li>
+      <li><Link to="#">Clay & Ceramic</Link></li>
+      <li><Link to="#">Textile Handicrafts</Link></li>
+      <li><Link to="#">Paintings</Link></li>
+      <li><Link to="#">Jewelry Handicrafts</Link></li>
+      <li><Link to="#">Home Decor</Link></li>
+    </ul>
+  </div>
+</div>
+
 
           <div className="copyright mt-3 pt-3 pb-3 d-flex">
             <p className="mb-0">Copyright 2024. All rights reserved</p>
