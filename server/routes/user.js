@@ -12,7 +12,8 @@ const fs = require("fs");
 const cloudinary = require("cloudinary").v2;
 const crypto = require("crypto");
 const rateLimit = require("express-rate-limit");
-const { buildAccountVerificationEmail } = require("../utils/emailTemplates");
+const { buildAccountVerificationEmail, buildPasswordResetOtpEmail } = require("../utils/emailTemplates");
+
 
 
 // ---------- Cloudinary ----------

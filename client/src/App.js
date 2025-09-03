@@ -20,6 +20,7 @@ import MyAccount from "./Pages/MyAccount";
 import SearchPage from "./Pages/Search";
 import VerifyOTP from "./Pages/VerifyOTP";
 import ChangePassword from "./Pages/ChangePassword";
+import ForgotPassword from "./Pages/ForgotPassword";
 
 
 import { fetchDataFromApi, postData } from "./utils/api";
@@ -269,6 +270,7 @@ function App() {
           />
           <Route exact={true} path="/cart" element={<Cart />} />
           <Route exact={true} path="/signIn" element={<SignIn />} />
+          <Route exact={true} path="/forgotPassword" element={<ForgotPassword />} />
           <Route exact={true} path="/signUp" element={<SignUp />} />
           <Route exact={true} path="/my-list" element={<MyList />} />
           <Route exact={true} path="/checkout" element={<Checkout />} />
@@ -277,6 +279,7 @@ function App() {
           <Route exact={true} path="/search" element={<SearchPage />} />
           <Route exact={true} path="/verifyOTP" element={<VerifyOTP />} />
           <Route exact={true} path="/changePassword" element={<ChangePassword />} />
+          
         </Routes>
         {isHeaderFooterShow === true && <Footer />}
 

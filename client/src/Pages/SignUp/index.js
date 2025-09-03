@@ -275,7 +275,7 @@ const SignUp = () => {
               />
             </div>
 
-            <a className="border-effect cursor txt">Forgot Password?</a>
+           
 
             <div className="d-flex align-items-center mt-3 mb-3 ">
               <div className="row w-100">
@@ -304,7 +304,7 @@ const SignUp = () => {
             </div>
 
             <p className="txt">
-              Not Registered?{" "}
+              
               <Link to="/signIn" className="border-effect">
                 Sign In
               </Link>

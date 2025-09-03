@@ -23,7 +23,6 @@ const SignIn = () => {
 
   useEffect(() => {
     context.setisHeaderFooterShow(false);
-
     context.setEnableFilterTab(false);
   }, []);
 
@@ -46,7 +45,7 @@ const SignIn = () => {
       context.setAlertBox({
         open: true,
         error: true,
-        msg: "email can not be blank!",
+        msg: "Email cannot be blank!",
       });
       return false;
     }
@@ -56,7 +55,7 @@ const SignIn = () => {
         context.setAlertBox({
           open: true,
           error: true,
-          msg: "password can not be blank!",
+          msg: "Password cannot be blank!",
         });
         return false;
       }
@@ -88,10 +87,8 @@ const SignIn = () => {
               context.setIsLogin(true);
               setIsLoading(false);
               context.setisHeaderFooterShow(true);
-              //window.location.href = "/";
             }, 2000);
-          } 
-          else {
+          } else {
             if (res?.isVerify === false) {
               setIsLoading(true);
               setIsOpenVerifyEmailBox(true);
@@ -120,15 +117,13 @@ const SignIn = () => {
           editData(`/api/user/verifyAccount/emailVerify/${res.existingUserId}`, {
             email: formfields.email,
             otp: res?.otp,
-          }).then((res) => {
+          }).then(() => {
             setTimeout(() => {
               setIsLoading(true);
               history("/verifyOTP");
-              //window.location.href="/signIn";
             }, 2000);
           });
         }
-        console.log(res);
       });
     }
   };
@@ -138,7 +133,6 @@ const SignIn = () => {
       .then((result) => {
         const credential = GoogleAuthProvider.credentialFromResult(result);
         const token = credential.accessToken;
-        // The signed-in user info.
         const user = result.user;
 
         const fields = {
@@ -173,7 +167,6 @@ const SignIn = () => {
                 context.setIsLogin(true);
                 setIsLoading(false);
                 context.setisHeaderFooterShow(true);
-                //window.location.href = "/";
               }, 2000);
             } else {
               context.setAlertBox({
@@ -192,51 +185,22 @@ const SignIn = () => {
         context.setAlertBox({
           open: true,
           error: false,
-          msg: "User authentication Successfully!",
+          msg: "User authenticated successfully!",
         });
-
-        // window.location.href = "/";
       })
       .catch((error) => {
-        // Handle Errors here.
-        const errorCode = error.code;
         const errorMessage = error.message;
-        // The email of the user's account used.
-        const email = error.customData.email;
-        // The AuthCredential type that was used.
-        const credential = GoogleAuthProvider.credentialFromError(error);
         context.setAlertBox({
           open: true,
           error: true,
           msg: errorMessage,
         });
-        // ...
       });
   };
-
-
-  const forgotPassword=()=>{
-    if(formfields.email===""){
-      context.setAlertBox({
-        open: true,
-        error: true,
-        msg: "Please enter your email",
-      });
-    }else{
-      localStorage.setItem("userEmail", formfields.email);
-      localStorage.setItem("actionType", "changePassword");
-      postData("/api/user/forgotPassword", {email:formfields.email}).then((res)=>{
-        if(res.status==="SUCCESS"){
-          history("/verifyOTP");
-        }
-      })
-    }
-  }
 
   return (
     <section className="section signInPage">
       <div className="shape-bottom">
-        {" "}
         <svg
           fill="#fff"
           id="Layer_1"
@@ -245,18 +209,17 @@ const SignIn = () => {
           viewBox="0 0 1921 819.8"
           style={{ enableBackground: "new 0 0 1921 819.8" }}
         >
-          {" "}
           <path
-            class="st0"
+            className="st0"
             d="M1921,413.1v406.7H0V0.5h0.4l228.1,598.3c30,74.4,80.8,130.6,152.5,168.6c107.6,57,212.1,40.7,245.7,34.4 c22.4-4.2,54.9-13.1,97.5-26.6L1921,400.5V413.1z"
-          ></path>{" "}
+          ></path>
         </svg>
       </div>
 
       <div className="container">
         <div className="box card p-3 shadow border-0">
           <div className="text-center">
-            <img src={Logo} />
+            <img src={Logo} alt="Thriftkart" />
           </div>
 
           <form className="mt-3" onSubmit={login}>
@@ -266,7 +229,6 @@ const SignIn = () => {
 
             <div className="form-group position-relative">
               <TextField
-                id="standard-basic"
                 label="Email"
                 type="email"
                 required
@@ -281,7 +243,6 @@ const SignIn = () => {
               <>
                 <div className="form-group">
                   <TextField
-                    id="standard-basic"
                     label="Password"
                     type="password"
                     required
@@ -292,14 +253,18 @@ const SignIn = () => {
                   />
                 </div>
 
-                <a className="border-effect cursor txt" onClick={forgotPassword}>Forgot Password?</a>
+                {/* ✅ Updated: Link to Forgot Password page */}
+                <div className="text-right mb-3">
+                  <Link to="/forgotPassword" className="border-effect cursor txt">
+                    Forgot Password?
+                  </Link>
+                </div>
 
                 <div className="d-flex align-items-center mt-3 mb-3 ">
                   <Button type="submit" className="btn-blue col btn-lg btn-big">
-                    {isLoading === true ? <CircularProgress /> : "Sign In"}
+                    {isLoading ? <CircularProgress /> : "Sign In"}
                   </Button>
                   <Link to="/">
-                    {" "}
                     <Button
                       className="btn-lg btn-big col ml-3"
                       variant="outlined"
@@ -326,12 +291,12 @@ const SignIn = () => {
                   variant="outlined"
                   onClick={signInWithGoogle}
                 >
-                  <img src={GoogleImg} /> Sign In with Google
+                  <img src={GoogleImg} alt="Google" /> Sign In with Google
                 </Button>
               </>
             ) : (
               <Button type="submit" className="btn-blue col btn-lg btn-big">
-                {isLoading === true ? <CircularProgress /> : "Verify Email"}
+                {isLoading ? <CircularProgress /> : "Verify Email"}
               </Button>
             )}
           </form>
