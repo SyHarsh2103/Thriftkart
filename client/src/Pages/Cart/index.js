@@ -10,7 +10,6 @@ import { useContext, useEffect, useState } from "react";
 import { deleteData, editData, fetchDataFromApi } from "../../utils/api";
 import { IoBagCheckOutline } from "react-icons/io5";
 import { FaHome } from "react-icons/fa";
-import { loadStripe } from '@stripe/stripe-js';
 import { useNavigate } from 'react-router-dom';
 
 const Cart = () => {
@@ -21,21 +20,21 @@ const Cart = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [selectedQuantity, setselectedQuantity] = useState();
     const [chengeQuantity, setchengeQuantity] = useState(0);
-    const [isLogin,setIsLogin]  = useState(false);
+    const [isLogin, setIsLogin] = useState(false);
 
     const context = useContext(MyContext);
     const history = useNavigate();
 
     useEffect(() => {
-        window.scrollTo(0,0)
-        
-    context.setEnableFilterTab(false);
+        window.scrollTo(0, 0)
+
+        context.setEnableFilterTab(false);
         const token = localStorage.getItem("token");
-        if(token!=="" && token!==undefined  && token!==null){
-          setIsLogin(true);
+        if (token !== "" && token !== undefined && token !== null) {
+            setIsLogin(true);
         }
-        else{
-          history("/signIn");
+        else {
+            history("/signIn");
         }
 
         const user = JSON.parse(localStorage.getItem("user"));
@@ -51,7 +50,6 @@ const Cart = () => {
         context.getCartData();
     }
 
-
     const selectedItem = (item, quantityVal) => {
         if (chengeQuantity !== 0) {
             setIsLoading(true);
@@ -65,21 +63,17 @@ const Cart = () => {
             cartFields.productId = item?.id
             cartFields.userId = user?.userId
 
-            //console.log(item?._id)
-
             editData(`/api/cart/${item?._id}`, cartFields).then((res) => {
                 setTimeout(() => {
                     setIsLoading(false);
                     const user = JSON.parse(localStorage.getItem("user"));
                     fetchDataFromApi(`/api/cart?userId=${user?.userId}`).then((res) => {
-                        setCartData(res);
+                        setCartData(res); // update local cart data
                     })
-                }, 1000)
+                }, 500)
             })
         }
-
     }
-
 
     const removeItem = (id) => {
         setIsLoading(true);
@@ -97,13 +91,20 @@ const Cart = () => {
             })
 
             context.getCartData();
-
         })
+    }
+
+    // 🟢 Calculate subtotal using local cartData
+    const calculateTotal = () => {
+        return (cartData?.length !== 0
+            ? cartData.map(item => parseInt(item.price) * item.quantity)
+                .reduce((total, value) => total + value, 0)
+            : 0
+        );
     }
 
     return (
         <>
-
             <section className="section cartPage">
                 <div className="container">
                     <h2 className="hd mb-1">Your Cart</h2>
@@ -114,7 +115,6 @@ const Cart = () => {
 
                             <div className="row">
                                 <div className="col-md-9 pr-5">
-
                                     <div className="table-responsive">
                                         <table className="table">
                                             <thead>
@@ -130,7 +130,7 @@ const Cart = () => {
                                                 {
                                                     cartData?.length !== 0 && cartData?.map((item, index) => {
                                                         return (
-                                                            <tr>
+                                                            <tr key={item?._id}>
                                                                 <td width="35%">
                                                                     <Link to={`/product/${item?.productId}`}>
                                                                         <div className="d-flex align-items-center cartItemimgWrapper">
@@ -142,11 +142,9 @@ const Cart = () => {
                                                                             <div className="info px-3">
                                                                                 <h6>
                                                                                     {item?.productTitle?.substr(0, 30) + '...'}
-
                                                                                 </h6>
                                                                                 <Rating name="read-only" value={item?.rating} readOnly size="small" />
                                                                             </div>
-
                                                                         </div>
                                                                     </Link>
                                                                 </td>
@@ -155,13 +153,15 @@ const Cart = () => {
                                                                     <QuantityBox quantity={quantity} item={item} selectedItem={selectedItem} value={item?.quantity} />
                                                                 </td>
                                                                 <td width="15%">Rs. {item?.subTotal}</td>
-                                                                <td width="10%"><span className="remove" onClick={() => removeItem(item?._id)}><IoIosClose /></span></td>
+                                                                <td width="10%">
+                                                                    <span className="remove" onClick={() => removeItem(item?._id)}>
+                                                                        <IoIosClose />
+                                                                    </span>
+                                                                </td>
                                                             </tr>
                                                         )
                                                     })
                                                 }
-
-
                                             </tbody>
                                         </table>
                                     </div>
@@ -174,10 +174,7 @@ const Cart = () => {
                                         <div className="d-flex align-items-center mb-3">
                                             <span>Subtotal</span>
                                             <span className="ml-auto text-red font-weight-bold">
-                                            {
-                                                (context.cartData?.length !== 0 ?
-                                                    context.cartData?.map(item => parseInt(item.price) * item.quantity).reduce((total, value) => total + value, 0) : 0)?.toLocaleString('en-US', { style: 'currency', currency: 'INR' })
-                                            }
+                                                {calculateTotal().toLocaleString('en-US', { style: 'currency', currency: 'INR' })}
                                             </span>
                                         </div>
 
@@ -186,51 +183,44 @@ const Cart = () => {
                                             <span className="ml-auto"><b>Free</b></span>
                                         </div>
 
-                                        <div className="d-flex align-items-center mb-3">
+                                        {/* <div className="d-flex align-items-center mb-3">
                                             <span>Estimate for</span>
                                             <span className="ml-auto"><b>United Kingdom</b></span>
-                                        </div>
+                                        </div> */}
 
                                         <div className="d-flex align-items-center">
                                             <span>Total</span>
                                             <span className="ml-auto text-red font-weight-bold">
-                                            {
-                                                (context.cartData?.length !== 0 ?
-                                                    context.cartData?.map(item => parseInt(item.price) * item.quantity).reduce((total, value) => total + value, 0) : 0)?.toLocaleString('en-US', { style: 'currency', currency: 'INR' })
-                                            }
+                                                {calculateTotal().toLocaleString('en-US', { style: 'currency', currency: 'INR' })}
                                             </span>
                                         </div>
 
-
                                         <br />
                                         <Link to="/checkout">
-                                            <Button className='btn-blue bg-red btn-lg btn-big'><IoBagCheckOutline /> &nbsp; Checkout</Button>
+                                            <Button className='btn-blue bg-red btn-lg btn-big'>
+                                                <IoBagCheckOutline /> &nbsp; Checkout
+                                            </Button>
                                         </Link>
-
                                     </div>
                                 </div>
                             </div>
 
                             :
-
-
                             <div className="empty d-flex align-items-center justify-content-center flex-column">
-                                <img src={emprtCart} width="150" />
+                                <img src={emprtCart} width="150" alt="empty cart" />
                                 <h3>Your Cart is currently empty</h3>
                                 <br />
-                                <Link to="/"> <Button className='btn-blue bg-red btn-lg btn-big btn-round'><FaHome /> &nbsp; Continue Shopping</Button></Link>
+                                <Link to="/">
+                                    <Button className='btn-blue bg-red btn-lg btn-big btn-round'>
+                                        <FaHome /> &nbsp; Continue Shopping
+                                    </Button>
+                                </Link>
                             </div>
-
-
                     }
-
-
                 </div>
             </section>
 
             {isLoading === true && <div className="loadingOverlay"></div>}
-
-
         </>
     )
 }

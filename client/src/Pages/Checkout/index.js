@@ -2,13 +2,14 @@ import React, { useContext, useEffect, useState } from "react";
 import TextField from "@mui/material/TextField";
 import Button from "@mui/material/Button";
 import { IoBagCheckOutline } from "react-icons/io5";
-
+import { useNavigate } from "react-router-dom";
 import { MyContext } from "../../App";
 import { fetchDataFromApi, postData, deleteData } from "../../utils/api";
 
-import { useNavigate } from "react-router-dom";
-
 const Checkout = () => {
+  const context = useContext(MyContext);   // ✅ Context
+  const navigate = useNavigate();          // ✅ useNavigate hook
+
   const [formFields, setFormFields] = useState({
     fullName: "",
     country: "",
@@ -22,126 +23,60 @@ const Checkout = () => {
   });
 
   const [cartData, setCartData] = useState([]);
-  const [totalAmount, setTotalAmount] = useState();
+  const [totalAmount, setTotalAmount] = useState(0);
 
+  // ✅ Fetch cart on mount
   useEffect(() => {
     window.scrollTo(0, 0);
-    
     context.setEnableFilterTab(false);
+
     const user = JSON.parse(localStorage.getItem("user"));
     fetchDataFromApi(`/api/cart?userId=${user?.userId}`).then((res) => {
-      setCartData(res);
-
-      setTotalAmount(
-        res.length !== 0 &&
-          res
-            .map((item) => parseInt(item.price) * item.quantity)
-            .reduce((total, value) => total + value, 0)
-      );
+      setCartData(res || []);
     });
-  }, []);
+  }, [context]);
 
+  // ✅ Recalculate total whenever cartData changes
+  useEffect(() => {
+    if (cartData.length !== 0) {
+      const total = cartData
+        .map((item) => parseInt(item.price) * item.quantity)
+        .reduce((total, value) => total + value, 0);
+
+      setTotalAmount(total);
+    } else {
+      setTotalAmount(0);
+    }
+  }, [cartData]);
+
+  // ✅ Input handler
   const onChangeInput = (e) => {
-    setFormFields(() => ({
-      ...formFields,
+    setFormFields((prev) => ({
+      ...prev,
       [e.target.name]: e.target.value,
     }));
   };
 
-  const context = useContext(MyContext);
-  const history = useNavigate();
-
-  const checkout = (e) => {
+  // ---------------- Razorpay Checkout ----------------
+  const checkout = async (e) => {
     e.preventDefault();
 
-    console.log(cartData);
-
-    console.log(formFields);
-    if (formFields.fullName === "") {
-      context.setAlertBox({
-        open: true,
-        error: true,
-        msg: "Please fill full name ",
-      });
-      return false;
-    }
-
-    if (formFields.country === "") {
-      context.setAlertBox({
-        open: true,
-        error: true,
-        msg: "Please fill country ",
-      });
-      return false;
-    }
-
-    if (formFields.streetAddressLine1 === "") {
-      context.setAlertBox({
-        open: true,
-        error: true,
-        msg: "Please fill Street address",
-      });
-      return false;
-    }
-
-    if (formFields.streetAddressLine2 === "") {
-      context.setAlertBox({
-        open: true,
-        error: true,
-        msg: "Please fill  Street address",
-      });
-      return false;
-    }
-
-    if (formFields.city === "") {
-      context.setAlertBox({
-        open: true,
-        error: true,
-        msg: "Please fill city ",
-      });
-      return false;
-    }
-
-    if (formFields.state === "") {
-      context.setAlertBox({
-        open: true,
-        error: true,
-        msg: "Please fill state ",
-      });
-      return false;
-    }
-
-    if (formFields.zipCode === "") {
-      context.setAlertBox({
-        open: true,
-        error: true,
-        msg: "Please fill zipCode ",
-      });
-      return false;
-    }
-
-    if (formFields.phoneNumber === "") {
-      context.setAlertBox({
-        open: true,
-        error: true,
-        msg: "Please fill phone Number ",
-      });
-      return false;
-    }
-
-    if (formFields.email === "") {
-      context.setAlertBox({
-        open: true,
-        error: true,
-        msg: "Please fill email",
-      });
-      return false;
+    // Validation
+    for (const [key, value] of Object.entries(formFields)) {
+      if (!value && key !== "streetAddressLine2") {
+        context.setAlertBox({
+          open: true,
+          error: true,
+          msg: `Please fill ${key}`,
+        });
+        return;
+      }
     }
 
     const addressInfo = {
       name: formFields.fullName,
       phoneNumber: formFields.phoneNumber,
-      address: formFields.streetAddressLine1 + formFields.streetAddressLine2,
+      address: formFields.streetAddressLine1 + " " + formFields.streetAddressLine2,
       pincode: formFields.zipCode,
       date: new Date().toLocaleString("en-US", {
         month: "short",
@@ -150,201 +85,133 @@ const Checkout = () => {
       }),
     };
 
-    var options = {
-      key: process.env.REACT_APP_RAZORPAY_KEY_ID,
-      key_secret: process.env.REACT_APP_RAZORPAY_KEY_SECRET,
-      amount: parseInt(totalAmount * 100),
+    // Step 1: Ask backend to create Razorpay order
+    const orderData = await postData("/api/orders/create-razorpay-order", {
+      amount: totalAmount,
       currency: "INR",
-      order_receipt: "order_rcptid_" + formFields.fullName,
-      name: "E-Bharat",
-      description: "for testing purpose",
-      handler: function (response) {
-        console.log(response);
+    });
 
-        const paymentId = response.razorpay_payment_id;
+    if (!orderData || !orderData.id) {
+      alert("Failed to create Razorpay order. Please try again.");
+      return;
+    }
 
-        const user = JSON.parse(localStorage.getItem("user"));
+    // Step 2: Razorpay Checkout options
+    const options = {
+      key: process.env.REACT_APP_RAZORPAY_KEY_ID,
+      order_id: orderData.id,
+      amount: orderData.amount,
+      currency: orderData.currency,
+      name: "Thriftkart",
+      description: "Secure payment for your Thriftkart order",
+      image: "/logo.png",
+      prefill: {
+        name: formFields.fullName,
+        email: formFields.email,
+        contact: formFields.phoneNumber,
+      },
+      handler: async function (response) {
+        // Step 3: Verify signature
+        const verifyRes = await postData("/api/orders/verify-payment", response);
 
-        const payLoad = {
-          name: addressInfo.name,
-          phoneNumber: formFields.phoneNumber,
-          address: addressInfo.address,
-          pincode: addressInfo.pincode,
-          amount: parseInt(totalAmount),
-          paymentId: paymentId,
-          paymentType:"Online",
-          email: user.email,
-          userid: user.userId,
-          products: cartData,
-          date:addressInfo?.date
-        };
+        if (verifyRes.success) {
+          // Step 4: Save order in DB
+          const user = JSON.parse(localStorage.getItem("user"));
+          const payLoad = {
+            name: addressInfo.name,
+            phoneNumber: formFields.phoneNumber,
+            address: addressInfo.address,
+            pincode: addressInfo.pincode,
+            amount: parseInt(totalAmount),
+            paymentId: response.razorpay_payment_id,
+            paymentType: "Online",
+            email: user.email,
+            userid: user.userId,
+            products: cartData,
+            date: addressInfo.date,
+          };
 
-        console.log(payLoad)
-          
+          await postData("/api/orders/create", payLoad);
 
-        postData(`/api/orders/create`, payLoad).then((res) => {
-             fetchDataFromApi(`/api/cart?userId=${user?.userId}`).then((res) => {
-            res?.length!==0 && res?.map((item)=>{
-                deleteData(`/api/cart/${item?.id}`).then((res) => {
-                })    
-            })
-                setTimeout(()=>{
-                    context.getCartData();
-                },1000);
-                history("/orders");
+          // Clear cart
+          fetchDataFromApi(`/api/cart?userId=${user?.userId}`).then((res) => {
+            res?.length !== 0 &&
+              res?.map((item) => {
+                deleteData(`/api/cart/${item?.id}`);
+              });
+            setTimeout(() => {
+              context.getCartData();
+            }, 1000);
+            navigate("/orders");
           });
-         
-        });
+        } else {
+          alert("Payment verification failed ❌");
+        }
       },
-
-      theme: {
-        color: "#3399cc",
-      },
+      theme: { color: "#3399cc" },
     };
 
-    var pay = new window.Razorpay(options);
-    pay.open();
+    const rzp = new window.Razorpay(options);
+    rzp.open();
   };
 
-
-  const cashOnDelivery = (e) => {
+  // ---------------- Cash On Delivery ----------------
+  const cashOnDelivery = async (e) => {
     e.preventDefault();
 
-    console.log(cartData);
-
-    console.log(formFields);
-    if (formFields.fullName === "") {
-      context.setAlertBox({
-        open: true,
-        error: true,
-        msg: "Please fill full name ",
-      });
-      return false;
-    }
-
-    if (formFields.country === "") {
-      context.setAlertBox({
-        open: true,
-        error: true,
-        msg: "Please fill country ",
-      });
-      return false;
-    }
-
-    if (formFields.streetAddressLine1 === "") {
-      context.setAlertBox({
-        open: true,
-        error: true,
-        msg: "Please fill Street address",
-      });
-      return false;
-    }
-
-    if (formFields.streetAddressLine2 === "") {
-      context.setAlertBox({
-        open: true,
-        error: true,
-        msg: "Please fill  Street address",
-      });
-      return false;
-    }
-
-    if (formFields.city === "") {
-      context.setAlertBox({
-        open: true,
-        error: true,
-        msg: "Please fill city ",
-      });
-      return false;
-    }
-
-    if (formFields.state === "") {
-      context.setAlertBox({
-        open: true,
-        error: true,
-        msg: "Please fill state ",
-      });
-      return false;
-    }
-
-    if (formFields.zipCode === "") {
-      context.setAlertBox({
-        open: true,
-        error: true,
-        msg: "Please fill zipCode ",
-      });
-      return false;
-    }
-
-    if (formFields.phoneNumber === "") {
-      context.setAlertBox({
-        open: true,
-        error: true,
-        msg: "Please fill phone Number ",
-      });
-      return false;
-    }
-
-    if (formFields.email === "") {
-      context.setAlertBox({
-        open: true,
-        error: true,
-        msg: "Please fill email",
-      });
-      return false;
+    // Validation
+    for (const [key, value] of Object.entries(formFields)) {
+      if (!value && key !== "streetAddressLine2") {
+        context.setAlertBox({
+          open: true,
+          error: true,
+          msg: `Please fill ${key}`,
+        });
+        return;
+      }
     }
 
     const addressInfo = {
       name: formFields.fullName,
       phoneNumber: formFields.phoneNumber,
-      address: formFields.streetAddressLine1 + formFields.streetAddressLine2,
+      address: formFields.streetAddressLine1 + " " + formFields.streetAddressLine2,
       pincode: formFields.zipCode,
       date: new Date().toLocaleString("en-US", {
         month: "short",
         day: "2-digit",
         year: "numeric",
       }),
-    };       
-      
-  
+    };
 
-        
+    const user = JSON.parse(localStorage.getItem("user"));
+    const payLoad = {
+      name: addressInfo.name,
+      phoneNumber: formFields.phoneNumber,
+      address: addressInfo.address,
+      pincode: addressInfo.pincode,
+      amount: parseInt(totalAmount),
+      paymentId: "None",
+      paymentType: "COD",
+      email: user.email,
+      userid: user.userId,
+      products: cartData,
+      date: addressInfo.date,
+    };
 
-        const user = JSON.parse(localStorage.getItem("user"));
+    await postData("/api/orders/create", payLoad);
 
-        const payLoad = {
-          name: addressInfo.name,
-          phoneNumber: formFields.phoneNumber,
-          address: addressInfo.address,
-          pincode: addressInfo.pincode,
-          amount: parseInt(totalAmount),
-          paymentId: "None",
-          paymentType:"COD",
-          email: user.email,
-          userid: user.userId,
-          products: cartData,
-          date:addressInfo?.date
-        };
-
-        console.log(payLoad)
-          
-
-        postData(`/api/orders/create`, payLoad).then((res) => {
-             fetchDataFromApi(`/api/cart?userId=${user?.userId}`).then((res) => {
-            res?.length!==0 && res?.map((item)=>{
-                deleteData(`/api/cart/${item?.id}`).then((res) => {
-                })    
-            })
-                setTimeout(()=>{
-                    context.getCartData();
-                },1000);
-                history("/orders");
-          });
-         
+    // Clear cart
+    fetchDataFromApi(`/api/cart?userId=${user?.userId}`).then((res) => {
+      res?.length !== 0 &&
+        res?.map((item) => {
+          deleteData(`/api/cart/${item?.id}`);
         });
-  
+      setTimeout(() => {
+        context.getCartData();
+      }, 1000);
+      navigate("/orders");
+    });
   };
-
 
   return (
     <section className="section">
@@ -356,140 +223,100 @@ const Checkout = () => {
 
               <div className="row mt-3">
                 <div className="col-md-6">
-                  <div className="form-group">
-                    <TextField
-                      label="Full Name *"
-                      variant="outlined"
-                      className="w-100"
-                      size="small"
-                      name="fullName"
-                      onChange={onChangeInput}
-                    />
-                  </div>
+                  <TextField
+                    label="Full Name *"
+                    variant="outlined"
+                    className="w-100"
+                    size="small"
+                    name="fullName"
+                    onChange={onChangeInput}
+                  />
                 </div>
-
                 <div className="col-md-6">
-                  <div className="form-group">
-                    <TextField
-                      label="Country *"
-                      variant="outlined"
-                      className="w-100"
-                      size="small"
-                      name="country"
-                      onChange={onChangeInput}
-                    />
-                  </div>
+                  <TextField
+                    label="Country *"
+                    variant="outlined"
+                    className="w-100"
+                    size="small"
+                    name="country"
+                    onChange={onChangeInput}
+                  />
                 </div>
               </div>
 
               <h6>Street address *</h6>
-
-              <div className="row">
-                <div className="col-md-12">
-                  <div className="form-group">
-                    <TextField
-                      label="House number and street name"
-                      variant="outlined"
-                      className="w-100"
-                      size="small"
-                      name="streetAddressLine1"
-                      onChange={onChangeInput}
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <TextField
-                      label="Apartment, suite, unit, etc. (optional)"
-                      variant="outlined"
-                      className="w-100"
-                      size="small"
-                      name="streetAddressLine2"
-                      onChange={onChangeInput}
-                    />
-                  </div>
-                </div>
-              </div>
+              <TextField
+                label="House number and street name"
+                variant="outlined"
+                className="w-100 mb-3"
+                size="small"
+                name="streetAddressLine1"
+                onChange={onChangeInput}
+              />
+              <TextField
+                label="Apartment, suite, unit, etc. (optional)"
+                variant="outlined"
+                className="w-100 mb-3"
+                size="small"
+                name="streetAddressLine2"
+                onChange={onChangeInput}
+              />
 
               <h6>Town / City *</h6>
-
-              <div className="row">
-                <div className="col-md-12">
-                  <div className="form-group">
-                    <TextField
-                      label="City"
-                      variant="outlined"
-                      className="w-100"
-                      size="small"
-                      name="city"
-                      onChange={onChangeInput}
-                    />
-                  </div>
-                </div>
-              </div>
+              <TextField
+                label="City"
+                variant="outlined"
+                className="w-100 mb-3"
+                size="small"
+                name="city"
+                onChange={onChangeInput}
+              />
 
               <h6>State / County *</h6>
-
-              <div className="row">
-                <div className="col-md-12">
-                  <div className="form-group">
-                    <TextField
-                      label="State"
-                      variant="outlined"
-                      className="w-100"
-                      size="small"
-                      name="state"
-                      onChange={onChangeInput}
-                    />
-                  </div>
-                </div>
-              </div>
+              <TextField
+                label="State"
+                variant="outlined"
+                className="w-100 mb-3"
+                size="small"
+                name="state"
+                onChange={onChangeInput}
+              />
 
               <h6>Postcode / ZIP *</h6>
-
-              <div className="row">
-                <div className="col-md-12">
-                  <div className="form-group">
-                    <TextField
-                      label="ZIP Code"
-                      variant="outlined"
-                      className="w-100"
-                      size="small"
-                      name="zipCode"
-                      onChange={onChangeInput}
-                    />
-                  </div>
-                </div>
-              </div>
+              <TextField
+                label="ZIP Code"
+                variant="outlined"
+                className="w-100 mb-3"
+                size="small"
+                name="zipCode"
+                onChange={onChangeInput}
+              />
 
               <div className="row">
                 <div className="col-md-6">
-                  <div className="form-group">
-                    <TextField
-                      label="Phone Number"
-                      variant="outlined"
-                      className="w-100"
-                      size="small"
-                      name="phoneNumber"
-                      onChange={onChangeInput}
-                    />
-                  </div>
+                  <TextField
+                    label="Phone Number"
+                    variant="outlined"
+                    className="w-100"
+                    size="small"
+                    name="phoneNumber"
+                    onChange={onChangeInput}
+                  />
                 </div>
-
                 <div className="col-md-6">
-                  <div className="form-group">
-                    <TextField
-                      label="Email Address"
-                      variant="outlined"
-                      className="w-100"
-                      size="small"
-                      name="email"
-                      onChange={onChangeInput}
-                    />
-                  </div>
+                  <TextField
+                    label="Email Address"
+                    variant="outlined"
+                    className="w-100"
+                    size="small"
+                    name="email"
+                    onChange={onChangeInput}
+                  />
                 </div>
               </div>
             </div>
 
+            {/* Order Summary */}
             <div className="col-md-4">
               <div className="card orderInfo">
                 <h4 className="hd">YOUR ORDER</h4>
@@ -501,39 +328,27 @@ const Checkout = () => {
                         <th>Subtotal</th>
                       </tr>
                     </thead>
-
                     <tbody>
                       {cartData?.length !== 0 &&
-                        cartData?.map((item, index) => {
-                          return (
-                            <tr>
-                              <td>
-                                {item?.productTitle?.substr(0, 20) + "..."}{" "}
-                                <b>× {item?.quantity}</b>
-                              </td>
-
-                              <td>
-                                {item?.subTotal?.toLocaleString("en-US", {
-                                  style: "currency",
-                                  currency: "INR",
-                                })}
-                              </td>
-                            </tr>
-                          );
-                        })}
+                        cartData?.map((item, index) => (
+                          <tr key={index}>
+                            <td>
+                              {item?.productTitle?.substr(0, 20) + "..."}{" "}
+                              <b>× {item?.quantity}</b>
+                            </td>
+                            <td>
+                              {(parseInt(item.price) * item.quantity)?.toLocaleString("en-US", {
+                                style: "currency",
+                                currency: "INR",
+                              })}
+                            </td>
+                          </tr>
+                        ))}
 
                       <tr>
-                        <td>Subtotal </td>
-
+                        <td><b>Total</b></td>
                         <td>
-                          {(cartData?.length !== 0
-                            ? cartData
-                                ?.map(
-                                  (item) => parseInt(item.price) * item.quantity
-                                )
-                                .reduce((total, value) => total + value, 0)
-                            : 0
-                          )?.toLocaleString("en-US", {
+                          {totalAmount?.toLocaleString("en-US", {
                             style: "currency",
                             currency: "INR",
                           })}

@@ -1,6 +1,14 @@
 const { Orders } = require('../models/orders');
 const express = require('express');
+const Razorpay = require("razorpay");
+const crypto = require("crypto");
 const router = express.Router();
+
+// Initialize Razorpay instance
+const razorpay = new Razorpay({
+    key_id: process.env.RAZORPAY_KEY_ID,
+    key_secret: process.env.RAZORPAY_KEY_SECRET,
+  });
 
 router.get(`/sales`, async (req, res) => {
     try {
@@ -373,6 +381,55 @@ router.put('/:id', async (req, res) => {
     res.send(order);
 
 })
+
+// ✅ Step 1: Create Razorpay Order
+router.post("/create-razorpay-order", async (req, res) => {
+    try {
+      const { amount, currency } = req.body;
+  
+      const options = {
+        amount: amount * 100, // paise
+        currency: currency || "INR",
+        receipt: "receipt_" + Date.now(),
+      };
+  
+      const order = await razorpay.orders.create(options);
+      res.json(order);
+    } catch (error) {
+      console.error("Error creating Razorpay order:", error);
+      res.status(500).json({ success: false });
+    }
+  });
+  
+  // ✅ Step 2: Verify Payment Signature
+  router.post("/verify-payment", (req, res) => {
+    try {
+      const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+  
+      // ✅ If running in development/test mode → skip verification
+      if (process.env.NODE_ENV !== "production") {
+        console.log("⚠️ Skipping Razorpay signature verification in Test Mode");
+        return res.json({ success: true, testMode: true });
+      }
+  
+      // ✅ Production: verify signature properly
+      const sign = razorpay_order_id + "|" + razorpay_payment_id;
+      const expectedSign = crypto
+        .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+        .update(sign.toString())
+        .digest("hex");
+  
+      if (razorpay_signature === expectedSign) {
+        res.json({ success: true });
+      } else {
+        res.status(400).json({ success: false, error: "Invalid signature" });
+      }
+    } catch (err) {
+      console.error("❌ Verification error:", err);
+      res.status(500).json({ success: false, error: "Server error" });
+    }
+  });
+  
 
 
 
