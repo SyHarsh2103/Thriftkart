@@ -1,7 +1,7 @@
 import "bootstrap/dist/css/bootstrap.min.css";
 import "./App.css";
 import "./responsive.css";
-import { BrowserRouter, Route, Router, Routes, json } from "react-router-dom";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
 import Home from "./Pages/Home";
 import Listing from "./Pages/Listing";
 import ProductDetails from "./Pages/ProductDetails";
@@ -9,6 +9,7 @@ import Header from "./Components/Header";
 import { createContext, useEffect, useState } from "react";
 import axios from "axios";
 import Footer from "./Components/Footer";
+import ScrollToTop from "./Components/Scrollbar"; 
 import ProductModal from "./Components/ProductModal";
 import Cart from "./Pages/Cart";
 import SignIn from "./Pages/SignIn";
@@ -21,11 +22,14 @@ import SearchPage from "./Pages/Search";
 import VerifyOTP from "./Pages/VerifyOTP";
 import ChangePassword from "./Pages/ChangePassword";
 import ForgotPassword from "./Pages/ForgotPassword";
-
-
 import { fetchDataFromApi, postData } from "./utils/api";
 import Snackbar from "@mui/material/Snackbar";
 import Alert from "@mui/material/Alert";
+import AboutUs from "./Pages/AboutUs";
+import TermsConditions from "./Pages/TermsConditions";
+import PrivacyPolicy from "./Pages/PrivacyPolicy";
+import RefundPolicy from "./Pages/RefundPolicy";
+import Contact from "./Pages/Contact";
 
 const MyContext = createContext();
 
@@ -250,7 +254,7 @@ function App() {
         </Snackbar>
 
         {isHeaderFooterShow === true && <Header />}
-
+        <ScrollToTop />  
         <Routes>
           <Route path="/" exact={true} element={<Home />} />
           <Route
@@ -279,6 +283,12 @@ function App() {
           <Route exact={true} path="/search" element={<SearchPage />} />
           <Route exact={true} path="/verifyOTP" element={<VerifyOTP />} />
           <Route exact={true} path="/changePassword" element={<ChangePassword />} />
+          <Route path="/about-us" element={<AboutUs />} />
+          <Route path="/terms-conditions" element={<TermsConditions />} />
+          <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+          <Route path="/refund-policy" element={<RefundPolicy />} />
+          <Route path="/contact" element={<Contact />} />
+          
           
         </Routes>
         {isHeaderFooterShow === true && <Footer />}

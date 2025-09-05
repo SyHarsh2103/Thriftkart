@@ -1,0 +1,64 @@
+.about-container {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 40px 20px;
+    color: #333;
+    line-height: 1.7;
+  }
+  
+  .about-intro {
+    text-align: center;
+    margin-bottom: 40px;
+  }
+  
+  .about-intro h1 {
+    font-size: 2.5rem;
+    margin-bottom: 15px;
+    color: #222;
+  }
+  
+  .about-section {
+    margin-bottom: 40px;
+  }
+  
+  .about-section h3 {
+    display: flex;
+    align-items: center;
+    font-size: 1.4rem;
+    margin-bottom: 15px;
+    color: #222;
+  }
+  
+  .about-section h3 .icon {
+    margin-right: 10px;
+    color: #6d4aae;   /* ✅ Thriftkart theme color */
+  }
+  
+  .about-section ul {
+    padding-left: 20px;
+    list-style: disc;
+  }
+  
+  .why-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 15px;
+    margin-top: 20px;
+  }
+  
+  .why-card {
+    background: #f8f9fa;
+    border-radius: 10px;
+    padding: 15px;
+    text-align: center;
+    font-weight: 500;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.08);
+    transition: transform 0.2s;
+  }
+  
+  .why-card:hover {
+    transform: translateY(-5px);
+    background: #fff;
+    border: 1px solid #6d4aae;   /* ✅ subtle hover accent */
+  }
+  
