@@ -63,20 +63,44 @@ router.post("/upload", (req, res) => {
 // ---------------- CREATE PRODUCT ----------------
 router.post("/create", async (req, res) => {
   try {
+    // Validate category
     const category = await Category.findById(req.body.category);
     if (!category) {
       return res.status(404).send("Invalid Category!");
     }
 
+    // Validate required fields
+    if (!req.body.images || req.body.images.length === 0) {
+      return res.status(400).json({ success: false, message: "At least one image is required" });
+    }
+
     const product = new Product({
-      ...req.body,
-      images: req.body.images || [], // store filenames
+      name: req.body.name,
+      description: req.body.description,
+      images: req.body.images, // ✅ filenames array directly
+      brand: req.body.brand,
+      price: req.body.price,
+      oldPrice: req.body.oldPrice,
+      catId: req.body.catId,
+      catName: req.body.catName,
+      subCat: req.body.subCat,
+      subCatId: req.body.subCatId,
+      subCatName: req.body.subCatName,
+      category: req.body.category, // ✅ ObjectId reference
+      countInStock: req.body.countInStock,
+      rating: req.body.rating,
+      isFeatured: req.body.isFeatured,
+      discount: req.body.discount,
+      productRam: req.body.productRam,
+      size: req.body.size,
+      productWeight: req.body.productWeight,
       location: req.body.location && req.body.location !== "" ? req.body.location : "All",
     });
 
     const saved = await product.save();
-    return res.status(201).json(saved);
+    res.status(201).json(saved);
   } catch (err) {
+    console.error("❌ Product create error:", err);
     res.status(500).json({ success: false, error: err.message });
   }
 });

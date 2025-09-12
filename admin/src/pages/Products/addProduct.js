@@ -44,6 +44,17 @@ const inputStyle = {
   boxSizing: "border-box",
 };
 
+const ITEM_HEIGHT = 48;
+const ITEM_PADDING_TOP = 8;
+const MenuProps = {
+  PaperProps: {
+    style: {
+      maxHeight: ITEM_HEIGHT * 4.5 + ITEM_PADDING_TOP,
+      width: 250,
+    },
+  },
+};
+
 const ProductUpload = () => {
   const [categoryVal, setcategoryVal] = useState("");
   const [subCatVal, setSubCatVal] = useState("");
@@ -52,32 +63,47 @@ const ProductUpload = () => {
   const [catData, setCatData] = useState([]);
   const [subCatData, setSubCatData] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+
+  // ✅ Reference-style image upload
   const [uploading, setUploading] = useState(false);
-  const [files, setFiles] = useState([]); // only filenames
+  const [files, setFiles] = useState([]); // uploaded filenames
+
   const [selectedLocation, setSelectedLocation] = useState([]);
   const [countryList, setCountryList] = useState([]);
+
+  // Product attributes
+  const [productRAMSData, setProductRAMSData] = useState([]);
+  const [productWEIGHTData, setProductWEIGHTData] = useState([]);
+  const [productSIZEData, setProductSIZEData] = useState([]);
+
+  const [productRams, setProductRams] = useState([]);
+  const [productWeight, setProductWeight] = useState([]);
+  const [productSize, setProductSize] = useState([]);
 
   const history = useNavigate();
   const context = useContext(MyContext);
 
+  // ✅ Full formFields
   const [formFields, setFormFields] = useState({
     name: "",
+    subCat: "",
+    subCatName: "",
     description: "",
     brand: "",
-    price: "",
-    oldPrice: "",
-    countInStock: "",
-    discount: "",
-    catId: "",
-    catName: "",
-    subCat: "",
+    price: null,
+    oldPrice: null,
     subCatId: "",
-    subCatName: "",
+    catName: "",
+    catId: "",
     category: "",
+    countInStock: null,
     rating: 0,
     isFeatured: null,
+    discount: null,
+    productRam: [],
+    size: [],
+    productWeight: [],
     location: [],
-    images: [],
   });
 
   useEffect(() => {
@@ -97,6 +123,10 @@ const ProductUpload = () => {
     fetchDataFromApi("/api/subCat").then((res) => {
       setSubCatData(res.subCategoryList);
     });
+
+    fetchDataFromApi("/api/productWeight").then((res) => setProductWEIGHTData(res));
+    fetchDataFromApi("/api/productRAMS").then((res) => setProductRAMSData(res));
+    fetchDataFromApi("/api/productSIZE").then((res) => setProductSIZEData(res));
 
     const newData = { value: "All", label: "All" };
     const updatedArray = [...context?.countryList];
@@ -136,12 +166,32 @@ const ProductUpload = () => {
   const selectSubCat = (subCat, id) => {
     setFormFields((prev) => ({
       ...prev,
-      subCat: subCat,
+      subCat,
       subCatName: subCat,
       subCatId: id,
     }));
   };
 
+  // ✅ Product attributes multi-select
+  const handleChangeProductRams = (event) => {
+    const { value } = event.target;
+    setProductRams(typeof value === "string" ? value.split(",") : value);
+    setFormFields((prev) => ({ ...prev, productRam: value }));
+  };
+
+  const handleChangeProductWeight = (event) => {
+    const { value } = event.target;
+    setProductWeight(typeof value === "string" ? value.split(",") : value);
+    setFormFields((prev) => ({ ...prev, productWeight: value }));
+  };
+
+  const handleChangeProductSize = (event) => {
+    const { value } = event.target;
+    setProductSize(typeof value === "string" ? value.split(",") : value);
+    setFormFields((prev) => ({ ...prev, size: value }));
+  };
+
+  // ✅ Image upload
   const onChangeFile = async (e) => {
     const selected = e.target.files;
     if (!selected || selected.length === 0) return;
@@ -157,7 +207,7 @@ const ProductUpload = () => {
 
     try {
       setUploading(true);
-      const res = await uploadImage("/api/products/upload", formdata);
+      const res = await uploadImage("/api/products/upload", formdata); // backend saves locally
       if (Array.isArray(res)) {
         setFiles((prev) => [...prev, ...res]);
         context.setAlertBox({ open: true, error: false, msg: "Images Uploaded!" });
@@ -175,25 +225,61 @@ const ProductUpload = () => {
 
   const addProduct = async (e) => {
     e.preventDefault();
-    if (files.length === 0) {
-      context.setAlertBox({ open: true, error: true, msg: "Upload at least one image" });
-      return;
-    }
-
+  
+    // 🔑 Validation (schema required fields)
+    if (!formFields.name) return context.setAlertBox({ open: true, msg: "Please add product name", error: true });
+    if (!formFields.description) return context.setAlertBox({ open: true, msg: "Please add product description", error: true });
+    if (!formFields.brand) return context.setAlertBox({ open: true, msg: "Please add product brand", error: true });
+    if (!formFields.price) return context.setAlertBox({ open: true, msg: "Please add product price", error: true });
+    if (!formFields.oldPrice) return context.setAlertBox({ open: true, msg: "Please add product old price", error: true });
+    if (!categoryVal) return context.setAlertBox({ open: true, msg: "Please select a category", error: true });
+    if (!formFields.countInStock) return context.setAlertBox({ open: true, msg: "Please add product stock", error: true });
+    if (ratingsValue === 0) return context.setAlertBox({ open: true, msg: "Please select product rating", error: true });
+    if (isFeaturedValue === null || isFeaturedValue === "") return context.setAlertBox({ open: true, msg: "Please select featured status", error: true });
+    if (!formFields.discount) return context.setAlertBox({ open: true, msg: "Please add product discount", error: true });
+    if (files.length === 0) return context.setAlertBox({ open: true, msg: "Please upload at least one image", error: true });
+  
     setIsLoading(true);
-    await postData("/api/products/create", {
-      ...formFields,
-      images: files,
-      catId: categoryVal,
-      subCatId: subCatVal,
-      rating: ratingsValue,
-      isFeatured: isFeaturedValue,
-      location: selectedLocation,
-    });
-
-    setIsLoading(false);
-    history("/products");
+  
+    try {
+      // ✅ Build JSON payload
+      const payload = {
+        name: formFields.name,
+        description: formFields.description,
+        brand: formFields.brand,
+        price: formFields.price,
+        oldPrice: formFields.oldPrice,
+        catId: categoryVal,          // string for filtering
+        catName: formFields.catName,
+        category: categoryVal,       // ✅ Mongo ObjectId (required)
+        subCatId: subCatVal,
+        subCat: formFields.subCat,
+        subCatName: formFields.subCatName,
+        countInStock: formFields.countInStock,
+        rating: ratingsValue,
+        isFeatured: isFeaturedValue,
+        discount: formFields.discount,
+        productRam: productRams,        // array
+        size: productSize,              // array
+        productWeight: productWeight,   // array
+        location: selectedLocation,     // array of { value, label }
+        images: files,                  // ✅ array of uploaded filenames
+      };
+  
+      console.log("📦 Payload:", payload);
+  
+      await postData("/api/products/create", payload);
+  
+      context.setAlertBox({ open: true, error: false, msg: "The product is created!" });
+      history("/products");
+    } catch (err) {
+      console.error("❌ Product creation failed:", err);
+      context.setAlertBox({ open: true, error: true, msg: "Failed to create product" });
+    } finally {
+      setIsLoading(false);
+    }
   };
+  
 
   return (
     <div className="right-content w-100">
@@ -220,6 +306,7 @@ const ProductUpload = () => {
             <textarea name="description" value={formFields.description} onChange={inputChange} style={{ ...inputStyle, minHeight: "80px" }} />
           </div>
 
+          {/* Category, subCat, price */}
           <div className="row">
             <div className="col-md-4 form-group">
               <h6>CATEGORY</h6>
@@ -245,18 +332,19 @@ const ProductUpload = () => {
             </div>
             <div className="col-md-4 form-group">
               <h6>PRICE</h6>
-              <input type="number" name="price" value={formFields.price} onChange={inputChange} style={inputStyle} />
+              <input type="number" name="price" value={formFields.price || ""} onChange={inputChange} style={inputStyle} />
             </div>
           </div>
 
+          {/* Old Price, Stock, Brand */}
           <div className="row">
             <div className="col-md-4 form-group">
               <h6>OLD PRICE</h6>
-              <input type="number" name="oldPrice" value={formFields.oldPrice} onChange={inputChange} style={inputStyle} />
+              <input type="number" name="oldPrice" value={formFields.oldPrice || ""} onChange={inputChange} style={inputStyle} />
             </div>
             <div className="col-md-4 form-group">
               <h6>PRODUCT STOCK</h6>
-              <input type="number" name="countInStock" value={formFields.countInStock} onChange={inputChange} style={inputStyle} />
+              <input type="number" name="countInStock" value={formFields.countInStock || ""} onChange={inputChange} style={inputStyle} />
             </div>
             <div className="col-md-4 form-group">
               <h6>BRAND</h6>
@@ -264,10 +352,11 @@ const ProductUpload = () => {
             </div>
           </div>
 
+          {/* Discount, Featured, Rating */}
           <div className="row">
             <div className="col-md-4 form-group">
               <h6>DISCOUNT</h6>
-              <input type="number" name="discount" value={formFields.discount} onChange={inputChange} style={inputStyle} />
+              <input type="number" name="discount" value={formFields.discount || ""} onChange={inputChange} style={inputStyle} />
             </div>
             <div className="col-md-4 form-group">
               <h6>IS FEATURED</h6>
@@ -279,14 +368,39 @@ const ProductUpload = () => {
             </div>
             <div className="col-md-4 form-group">
               <h6>RATINGS</h6>
-              <Rating
-                name="simple-controlled"
-                value={ratingsValue}
-                onChange={(event, newValue) => setRatingValue(newValue)}
-              />
+              <Rating value={ratingsValue} onChange={(e, val) => setRatingValue(val)} />
             </div>
           </div>
 
+          {/* Product Attributes */}
+          <div className="row">
+            <div className="col-md-4 form-group">
+              <h6>PRODUCT RAMS</h6>
+              <Select multiple value={productRams} onChange={handleChangeProductRams} MenuProps={MenuProps} className="w-100">
+                {productRAMSData?.map((item, idx) => (
+                  <MenuItem key={idx} value={item.productRam}>{item.productRam}</MenuItem>
+                ))}
+              </Select>
+            </div>
+            <div className="col-md-4 form-group">
+              <h6>PRODUCT WEIGHT</h6>
+              <Select multiple value={productWeight} onChange={handleChangeProductWeight} MenuProps={MenuProps} className="w-100">
+                {productWEIGHTData?.map((item, idx) => (
+                  <MenuItem key={idx} value={item.productWeight}>{item.productWeight}</MenuItem>
+                ))}
+              </Select>
+            </div>
+            <div className="col-md-4 form-group">
+              <h6>PRODUCT SIZE</h6>
+              <Select multiple value={productSize} onChange={handleChangeProductSize} MenuProps={MenuProps} className="w-100">
+                {productSIZEData?.map((item, idx) => (
+                  <MenuItem key={idx} value={item.size}>{item.size}</MenuItem>
+                ))}
+              </Select>
+            </div>
+          </div>
+
+          {/* Location */}
           <div className="form-group">
             <h6>LOCATION</h6>
             <Select2
@@ -300,6 +414,7 @@ const ProductUpload = () => {
           </div>
         </div>
 
+        {/* ✅ Media Upload */}
         <div className="card p-4 mt-3">
           <h5 className="mb-4">Media And Published</h5>
           {uploading ? (

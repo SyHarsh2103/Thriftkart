@@ -120,10 +120,10 @@ function generateUniqueProductId() {
 
 // Pre-save middleware to set orderId before saving
 productSchema.pre('save', function (next) {
-    if (!this.productIdId) {
-        this.productIdId = generateUniqueProductId();
-    }
-    next();
+  if (!this.productId) {
+    this.productId = generateUniqueProductId();
+  }
+  next();
 });
 
 productSchema.set('toJSON', {
