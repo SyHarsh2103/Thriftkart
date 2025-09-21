@@ -25,6 +25,9 @@ const Cart = () => {
     const context = useContext(MyContext);
     const history = useNavigate();
 
+    // 🟢 Tax Rate (change as needed)
+    const TAX_RATE = 0.18; // 18%
+
     useEffect(() => {
         window.scrollTo(0, 0)
 
@@ -94,13 +97,23 @@ const Cart = () => {
         })
     }
 
-    // 🟢 Calculate subtotal using local cartData
-    const calculateTotal = () => {
+    // 🟢 Calculate subtotal
+    const calculateSubtotal = () => {
         return (cartData?.length !== 0
             ? cartData.map(item => parseInt(item.price) * item.quantity)
                 .reduce((total, value) => total + value, 0)
             : 0
         );
+    }
+
+    // 🟢 Calculate Tax
+    const calculateTax = () => {
+        return calculateSubtotal() * TAX_RATE;
+    }
+
+    // 🟢 Calculate Total
+    const calculateTotal = () => {
+        return calculateSubtotal() + calculateTax();
     }
 
     return (
@@ -174,7 +187,14 @@ const Cart = () => {
                                         <div className="d-flex align-items-center mb-3">
                                             <span>Subtotal</span>
                                             <span className="ml-auto text-red font-weight-bold">
-                                                {calculateTotal().toLocaleString('en-US', { style: 'currency', currency: 'INR' })}
+                                                {calculateSubtotal().toLocaleString('en-US', { style: 'currency', currency: 'INR' })}
+                                            </span>
+                                        </div>
+
+                                        <div className="d-flex align-items-center mb-3">
+                                            <span>Tax (18%)</span>
+                                            <span className="ml-auto">
+                                                {calculateTax().toLocaleString('en-US', { style: 'currency', currency: 'INR' })}
                                             </span>
                                         </div>
 
@@ -182,11 +202,6 @@ const Cart = () => {
                                             <span>Shipping</span>
                                             <span className="ml-auto"><b>Free</b></span>
                                         </div>
-
-                                        {/* <div className="d-flex align-items-center mb-3">
-                                            <span>Estimate for</span>
-                                            <span className="ml-auto"><b>United Kingdom</b></span>
-                                        </div> */}
 
                                         <div className="d-flex align-items-center">
                                             <span>Total</span>

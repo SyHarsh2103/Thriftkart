@@ -15,8 +15,7 @@ const TermsConditions = () => {
       </p>
 
       <h3>1. Eligibility</h3>
-      <p>You must be at least 18 years old to register or purchase from Thriftkart.</p>
-      <p>If you are under 18, you may use the Platform only under the supervision of a parent or legal guardian.</p>
+      <p>Our platform is open to everyone. All customers are welcome to browse, shop, and enjoy the products and services offered by Thriftkart.</p>
 
       <h3>2. Account Registration</h3>
       <p>You are responsible for maintaining the confidentiality of your login credentials.</p>

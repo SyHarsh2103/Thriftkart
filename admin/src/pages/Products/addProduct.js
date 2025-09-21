@@ -191,32 +191,69 @@ const ProductUpload = () => {
     setFormFields((prev) => ({ ...prev, size: value }));
   };
 
-  // ✅ Image upload
-  const onChangeFile = async (e) => {
-    const selected = e.target.files;
-    if (!selected || selected.length === 0) return;
+  // ✅ Image upload with size validation
+const onChangeFile = async (e) => {
+  const selected = e.target.files;
+  if (!selected || selected.length === 0) return;
 
-    const formdata = new FormData();
-    for (let f of selected) {
-      if (!["image/jpeg", "image/png", "image/webp", "image/jpg"].includes(f.type)) {
-        context.setAlertBox({ open: true, error: true, msg: "Only JPG/PNG/WEBP allowed." });
-        return;
-      }
-      formdata.append("images", f);
+  const validFiles = [];
+
+  for (let f of selected) {
+    if (!["image/jpeg", "image/png", "image/webp", "image/jpg"].includes(f.type)) {
+      context.setAlertBox({ open: true, error: true, msg: "Only JPG/PNG/WEBP allowed." });
+      return;
     }
 
-    try {
-      setUploading(true);
-      const res = await uploadImage("/api/products/upload", formdata); // backend saves locally
-      if (Array.isArray(res)) {
-        setFiles((prev) => [...prev, ...res]);
-        context.setAlertBox({ open: true, error: false, msg: "Images Uploaded!" });
-      }
-    } finally {
-      setUploading(false);
-      e.target.value = "";
+    // ✅ Dimension validation
+    const isValid = await new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          if (img.width === 540 && img.height === 720) {
+            resolve(true);
+          } else {
+            resolve(false);
+          }
+        };
+        img.src = event.target.result;
+      };
+      reader.readAsDataURL(f);
+    });
+
+    if (!isValid) {
+      context.setAlertBox({
+        open: true,
+        error: true,
+        msg: `Image "${f.name}" must be 540px wide × 720px high.`,
+      });
+      continue; // skip this file
     }
-  };
+
+    validFiles.push(f);
+  }
+
+  if (validFiles.length === 0) {
+    e.target.value = "";
+    return;
+  }
+
+  const formdata = new FormData();
+  validFiles.forEach((file) => formdata.append("images", file));
+
+  try {
+    setUploading(true);
+    const res = await uploadImage("/api/products/upload", formdata); // backend saves locally
+    if (Array.isArray(res)) {
+      setFiles((prev) => [...prev, ...res]);
+      context.setAlertBox({ open: true, error: false, msg: "Images Uploaded!" });
+    }
+  } finally {
+    setUploading(false);
+    e.target.value = "";
+  }
+};
+
 
   const removeFile = async (index, filename) => {
     await deleteImages(`/api/products/deleteImage?img=${filename}`);
@@ -414,48 +451,77 @@ const ProductUpload = () => {
           </div>
         </div>
 
-        {/* ✅ Media Upload */}
-        <div className="card p-4 mt-3">
-          <h5 className="mb-4">Media And Published</h5>
-          {uploading ? (
-            <div className="progressBar text-center d-flex align-items-center justify-content-center flex-column">
-              <CircularProgress />
-              <span>Uploading...</span>
-            </div>
-          ) : (
-            <label htmlFor="file-upload">
-              <input id="file-upload" type="file" multiple onChange={onChangeFile} style={{ display: "none" }} />
-              <Button variant="contained" component="span" startIcon={<FaRegImages />} className="btn-blue">
-                Choose Files
-              </Button>
-            </label>
-          )}
+       {/* ✅ Media Upload */}
+<div className="card p-4 mt-3">
+  <h5 className="mb-4">Media And Published</h5>
 
-          {files.length > 0 && (
-            <ul className="list-unstyled mt-3">
-              {files.map((fn, i) => (
-                <li key={i} className="d-flex justify-content-between align-items-center border p-2 mb-2 rounded">
-                  <span>{fn}</span>
-                  <Button
-                    size="small"
-                    color="error"
-                    variant="outlined"
-                    onClick={() => removeFile(i, fn)}
-                    startIcon={<IoCloseSharp />}
-                  >
-                    Remove
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
+  {/* 🖼️ Image size requirement note */}
+  <p style={{ fontSize: "13px", color: "#777", marginBottom: "10px" }}>
+    Image size must be <strong>720px height</strong> × <strong>540px width</strong>
+  </p>
 
-          <br />
-          <Button type="submit" disabled={uploading} className="btn-blue btn-lg btn-big w-100">
-            <FaCloudUploadAlt /> &nbsp;
-            {isLoading ? <CircularProgress color="inherit" className="loader" /> : "PUBLISH AND VIEW"}
+  {uploading ? (
+    <div className="progressBar text-center d-flex align-items-center justify-content-center flex-column">
+      <CircularProgress />
+      <span>Uploading...</span>
+    </div>
+  ) : (
+    <label htmlFor="file-upload">
+      <input
+        id="file-upload"
+        type="file"
+        multiple
+        onChange={onChangeFile}
+        style={{ display: "none" }}
+      />
+      <Button
+        variant="contained"
+        component="span"
+        startIcon={<FaRegImages />}
+        className="btn-blue"
+      >
+        Choose Files
+      </Button>
+    </label>
+  )}
+
+  {files.length > 0 && (
+    <ul className="list-unstyled mt-3">
+      {files.map((fn, i) => (
+        <li
+          key={i}
+          className="d-flex justify-content-between align-items-center border p-2 mb-2 rounded"
+        >
+          <span>{fn}</span>
+          <Button
+            size="small"
+            color="error"
+            variant="outlined"
+            onClick={() => removeFile(i, fn)}
+            startIcon={<IoCloseSharp />}
+          >
+            Remove
           </Button>
-        </div>
+        </li>
+      ))}
+    </ul>
+  )}
+
+  <br />
+  <Button
+    type="submit"
+    disabled={uploading}
+    className="btn-blue btn-lg btn-big w-100"
+  >
+    <FaCloudUploadAlt /> &nbsp;
+    {isLoading ? (
+      <CircularProgress color="inherit" className="loader" />
+    ) : (
+      "PUBLISH AND VIEW"
+    )}
+  </Button>
+</div>
+
       </form>
     </div>
   );

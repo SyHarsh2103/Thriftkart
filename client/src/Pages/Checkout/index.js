@@ -23,7 +23,11 @@ const Checkout = () => {
   });
 
   const [cartData, setCartData] = useState([]);
+  const [subtotal, setSubtotal] = useState(0);
+  const [taxAmount, setTaxAmount] = useState(0);
   const [totalAmount, setTotalAmount] = useState(0);
+
+  const TAX_PERCENTAGE = 0.18; // 18% GST
 
   // ✅ Fetch cart on mount
   useEffect(() => {
@@ -36,15 +40,21 @@ const Checkout = () => {
     });
   }, [context]);
 
-  // ✅ Recalculate total whenever cartData changes
+  // ✅ Recalculate totals whenever cartData changes
   useEffect(() => {
     if (cartData.length !== 0) {
-      const total = cartData
+      const sub = cartData
         .map((item) => parseInt(item.price) * item.quantity)
         .reduce((total, value) => total + value, 0);
 
-      setTotalAmount(total);
+      const tax = sub * TAX_PERCENTAGE;
+
+      setSubtotal(sub);
+      setTaxAmount(tax);
+      setTotalAmount(sub + tax);
     } else {
+      setSubtotal(0);
+      setTaxAmount(0);
       setTotalAmount(0);
     }
   }, [cartData]);
@@ -123,6 +133,8 @@ const Checkout = () => {
             address: addressInfo.address,
             pincode: addressInfo.pincode,
             amount: parseInt(totalAmount),
+            subtotal: parseInt(subtotal),
+            tax: parseInt(taxAmount),
             paymentId: response.razorpay_payment_id,
             paymentType: "Online",
             email: user.email,
@@ -190,6 +202,8 @@ const Checkout = () => {
       address: addressInfo.address,
       pincode: addressInfo.pincode,
       amount: parseInt(totalAmount),
+      subtotal: parseInt(subtotal),
+      tax: parseInt(taxAmount),
       paymentId: "None",
       paymentType: "COD",
       email: user.email,
@@ -344,6 +358,26 @@ const Checkout = () => {
                             </td>
                           </tr>
                         ))}
+
+                      <tr>
+                        <td><b>Subtotal</b></td>
+                        <td>
+                          {subtotal?.toLocaleString("en-US", {
+                            style: "currency",
+                            currency: "INR",
+                          })}
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td><b>Tax (18%)</b></td>
+                        <td>
+                          {taxAmount?.toLocaleString("en-US", {
+                            style: "currency",
+                            currency: "INR",
+                          })}
+                        </td>
+                      </tr>
 
                       <tr>
                         <td><b>Total</b></td>
