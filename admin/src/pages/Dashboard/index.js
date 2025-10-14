@@ -279,7 +279,7 @@ const Dashboard = () => {
                                   alt="product"
                                   effect="blur"
                                   className="w-100"
-                                  src={`${process.env.REACT_APP_BASE_URL}/uploads/products/${item.images[0]}`}
+                                  src={item.images[0]}
                                 />
                               </div>
                             </div>
