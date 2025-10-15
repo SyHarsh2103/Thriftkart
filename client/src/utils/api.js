@@ -5,7 +5,7 @@ const api = axios.create({
   timeout: 30000,
 });
 
-// attach the freshest token on every request
+// Attach freshest token on every request
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
   if (token) {
@@ -15,20 +15,36 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Normalize errors and tag cancellations so callers can ignore them
 api.interceptors.response.use(
   (res) => res,
   (err) => {
+    // 👉 Detect axios cancellation
+    if (axios.isCancel?.(err) || err?.code === "ERR_CANCELED" || err?.name === "CanceledError") {
+      err.isCanceled = true;          // tag it for caller
+      return Promise.reject(err);
+    }
+
     const msg =
       err?.response?.data?.message ||
       err?.response?.data?.error ||
       err?.message ||
       "Request failed";
+
     const enriched = new Error(msg);
     enriched.status = err?.response?.status;
     enriched.data = err?.response?.data;
-    throw enriched;
+    enriched.code = err?.code;
+    return Promise.reject(enriched);
   }
 );
+
+// 👇 tiny helper to check for cancelations in pages/components
+export function isCanceledError(e) {
+  return e?.isCanceled || e?.name === "AbortError" || e?.name === "CanceledError" || e?.code === "ERR_CANCELED";
+}
+
+// ===== Helpers =====
 
 // GET
 export async function fetchDataFromApi(url, opts = {}) {

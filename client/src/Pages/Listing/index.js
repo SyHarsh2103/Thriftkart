@@ -10,7 +10,7 @@ import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import ProductItem from "../../Components/ProductItem";
 
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { fetchDataFromApi } from "../../utils/api";
+import { fetchDataFromApi, isCanceledError } from "../../utils/api";
 import CircularProgress from "@mui/material/CircularProgress";
 
 import { MyContext } from "../../App";
@@ -46,6 +46,7 @@ const Listing = () => {
   const loadProducts = async ({ pageArg = page, perPageArg = perPage } = {}) => {
     if (!id) return;
 
+    // cancel in-flight
     if (abortRef.current) abortRef.current.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -71,7 +72,8 @@ const Listing = () => {
 
       setProductData(normalized);
     } catch (e) {
-      if (e?.name !== "AbortError") setErr(e?.message || "Failed to load products");
+      if (isCanceledError(e)) return; // ignore aborts
+      setErr(e?.message || "Failed to load products");
     } finally {
       setIsLoading(false);
     }
@@ -137,7 +139,8 @@ const Listing = () => {
       setPage(1);
       setProductData(normalized);
     } catch (e) {
-      if (e?.name !== "AbortError") setErr(e?.message || "Failed to filter by price");
+      if (isCanceledError(e)) return; // ignore aborts
+      setErr(e?.message || "Failed to filter by price");
     } finally {
       setIsLoading(false);
     }
@@ -171,7 +174,8 @@ const Listing = () => {
       setProductData(normalized);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (e) {
-      if (e?.name !== "AbortError") setErr(e?.message || "Failed to filter by rating");
+      if (isCanceledError(e)) return; // ignore aborts
+      setErr(e?.message || "Failed to filter by rating");
     } finally {
       setIsLoading(false);
     }
