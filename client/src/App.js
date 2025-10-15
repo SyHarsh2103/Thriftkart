@@ -1,7 +1,8 @@
 import "bootstrap/dist/css/bootstrap.min.css";
 import "./App.css";
 import "./responsive.css";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+
+import { Route, Routes, useLocation } from "react-router-dom";
 import Home from "./Pages/Home";
 import Listing from "./Pages/Listing";
 import ProductDetails from "./Pages/ProductDetails";
@@ -9,7 +10,7 @@ import Header from "./Components/Header";
 import { createContext, useEffect, useState } from "react";
 import axios from "axios";
 import Footer from "./Components/Footer";
-import ScrollToTop from "./Components/Scrollbar"; 
+import ScrollToTop from "./Components/Scrollbar";
 import ProductModal from "./Components/ProductModal";
 import Cart from "./Pages/Cart";
 import SignIn from "./Pages/SignIn";
@@ -34,6 +35,8 @@ import Contact from "./Pages/Contact";
 const MyContext = createContext();
 
 function App() {
+  const location = useLocation();
+
   const [countryList, setCountryList] = useState([]);
   const [selectedCountry, setselectedCountry] = useState("");
   const [isOpenProductModal, setisOpenProductModal] = useState(false);
@@ -53,25 +56,13 @@ function App() {
   const [isOpenFilters, setIsOpenFilters] = useState(false);
   const [isBottomShow, setIsBottomShow] = useState(true);
 
-  const [alertBox, setAlertBox] = useState({
-    msg: "",
-    error: false,
-    open: false,
-  });
+  const [alertBox, setAlertBox] = useState({ msg: "", error: false, open: false });
 
-  const [user, setUser] = useState({
-    name: "",
-    email: "",
-    userId: "",
-  });
+  const [user, setUser] = useState({ name: "", email: "", userId: "" });
 
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem("user"));
-    if (
-      user?.userId !== "" &&
-      user?.userId !== undefined &&
-      user?.userId !== null
-    ) {
+    if (user?.userId) {
       fetchDataFromApi(`/api/cart?userId=${user?.userId}`).then((res) => {
         setCartData(res);
       });
@@ -83,55 +74,39 @@ function App() {
 
     fetchDataFromApi("/api/category").then((res) => {
       setCategoryData(res.categoryList);
-
       const subCatArr = [];
-
-      res.categoryList?.length !== 0 &&
-        res.categoryList?.map((cat, index) => {
-          if (cat?.children.length !== 0) {
-            cat?.children?.map((subCat) => {
-              subCatArr.push(subCat);
-            });
-          }
-        });
-
+      res.categoryList?.forEach((cat) => {
+        if (cat?.children?.length) {
+          cat.children.forEach((subCat) => subCatArr.push(subCat));
+        }
+      });
       setsubCategoryData(subCatArr);
     });
 
-    const handleResize = () => {
-      setWindowWidth(window.innerWidth);
-    };
+    const handleResize = () => setWindowWidth(window.innerWidth);
 
-    const location = localStorage.getItem("location");
-    if (location !== null && location !== "" && location !== undefined) {
-      setselectedCountry(location);
-    } else {
+    const locationStr = localStorage.getItem("location");
+    if (locationStr) setselectedCountry(locationStr);
+    else {
       setselectedCountry("All");
       localStorage.setItem("location", "All");
     }
 
     window.addEventListener("resize", handleResize);
-
-    return () => {
-      window.removeEventListener("resize", handleResize);
-    };
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   const getCartData = () => {
     const user = JSON.parse(localStorage.getItem("user"));
-    fetchDataFromApi(`/api/cart?userId=${user?.userId}`).then((res) => {
-      setCartData(res);
-    });
+    if (!user?.userId) return;
+    fetchDataFromApi(`/api/cart?userId=${user?.userId}`).then((res) => setCartData(res));
   };
 
   useEffect(() => {
     const token = localStorage.getItem("token");
-
-    if (token !== "" && token !== undefined && token !== null) {
+    if (token) {
       setIsLogin(true);
-
       const userData = JSON.parse(localStorage.getItem("user"));
-
       setUser(userData);
     } else {
       setIsLogin(false);
@@ -146,52 +121,30 @@ function App() {
   };
 
   const getCountry = async (url) => {
-    const responsive = await axios.get(url).then((res) => {
-      setCountryList(res.data.data);
-    });
+    const responsive = await axios.get(url);
+    setCountryList(responsive.data.data);
   };
 
-  const handleClose = (event, reason) => {
-    if (reason === "clickaway") {
-      return;
-    }
-
-    setAlertBox({
-      open: false,
-    });
+  const handleClose = (_, reason) => {
+    if (reason === "clickaway") return;
+    setAlertBox({ open: false });
   };
 
   const addToCart = (data) => {
-    if (isLogin === true) {
+    if (isLogin) {
       setAddingInCart(true);
       postData(`/api/cart/add`, data).then((res) => {
         if (res.status !== false) {
-          setAlertBox({
-            open: true,
-            error: false,
-            msg: "Item is added in the cart",
-          });
-
-          setTimeout(() => {
-            setAddingInCart(false);
-          }, 1000);
-
+          setAlertBox({ open: true, error: false, msg: "Item is added in the cart" });
+          setTimeout(() => setAddingInCart(false), 1000);
           getCartData();
         } else {
-          setAlertBox({
-            open: true,
-            error: true,
-            msg: res.msg,
-          });
+          setAlertBox({ open: true, error: true, msg: res.msg });
           setAddingInCart(false);
         }
       });
     } else {
-      setAlertBox({
-        open: true,
-        error: true,
-        msg: "Please login first",
-      });
+      setAlertBox({ open: true, error: true, msg: "Please login first" });
     }
   };
 
@@ -234,71 +187,51 @@ function App() {
   };
 
   return (
-    <BrowserRouter>
-      <MyContext.Provider value={values}>
-        <Snackbar
-          open={alertBox.open}
-          autoHideDuration={6000}
+    <MyContext.Provider value={values}>
+      <Snackbar open={alertBox.open} autoHideDuration={6000} onClose={handleClose} className="snackbar">
+        <Alert
           onClose={handleClose}
-          className="snackbar"
+          autoHideDuration={6000}
+          severity={alertBox.error === false ? "success" : "error"}
+          variant="filled"
+          sx={{ width: "100%" }}
         >
-          <Alert
-            onClose={handleClose}
-            autoHideDuration={6000}
-            severity={alertBox.error === false ? "success" : "error"}
-            variant="filled"
-            sx={{ width: "100%" }}
-          >
-            {alertBox.msg}
-          </Alert>
-        </Snackbar>
+          {alertBox.msg}
+        </Alert>
+      </Snackbar>
 
-        {isHeaderFooterShow === true && <Header />}
-        <ScrollToTop />  
-        <Routes>
-          <Route path="/" exact={true} element={<Home />} />
-          <Route
-            path="/products/category/:id"
-            exact={true}
-            element={<Listing />}
-          />
-          <Route
-            path="/products/subCat/:id"
-            exact={true}
-            element={<Listing />}
-          />
-          <Route
-            exact={true}
-            path="/products/:id"
-            element={<ProductDetails />}
-          />
-          <Route exact={true} path="/cart" element={<Cart />} />
-          <Route exact={true} path="/signIn" element={<SignIn />} />
-          <Route exact={true} path="/forgotPassword" element={<ForgotPassword />} />
-          <Route exact={true} path="/signUp" element={<SignUp />} />
-          <Route exact={true} path="/my-list" element={<MyList />} />
-          <Route exact={true} path="/checkout" element={<Checkout />} />
-          <Route exact={true} path="/orders" element={<Orders />} />
-          <Route exact={true} path="/my-account" element={<MyAccount />} />
-          <Route exact={true} path="/search" element={<SearchPage />} />
-          <Route exact={true} path="/verifyOTP" element={<VerifyOTP />} />
-          <Route exact={true} path="/changePassword" element={<ChangePassword />} />
-          <Route path="/about-us" element={<AboutUs />} />
-          <Route path="/terms-conditions" element={<TermsConditions />} />
-          <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-          <Route path="/refund-policy" element={<RefundPolicy />} />
-          <Route path="/contact" element={<Contact />} />
-          
-          
-        </Routes>
-        {isHeaderFooterShow === true && <Footer />}
+      {isHeaderFooterShow && <Header />}
+      <ScrollToTop />
 
-        {isOpenProductModal === true && <ProductModal data={productData} />}
-      </MyContext.Provider>
-    </BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        {/* Force remount on path change */}
+        <Route path="/products/category/:id" element={<Listing key={location.pathname} />} />
+        <Route path="/products/subCat/:id" element={<Listing key={location.pathname} />} />
+        <Route path="/products/:id" element={<ProductDetails key={location.pathname} />} />
+        <Route path="/cart" element={<Cart />} />
+        <Route path="/signIn" element={<SignIn />} />
+        <Route path="/forgotPassword" element={<ForgotPassword />} />
+        <Route path="/signUp" element={<SignUp />} />
+        <Route path="/my-list" element={<MyList />} />
+        <Route path="/checkout" element={<Checkout />} />
+        <Route path="/orders" element={<Orders />} />
+        <Route path="/my-account" element={<MyAccount />} />
+        <Route path="/search" element={<SearchPage />} />
+        <Route path="/verifyOTP" element={<VerifyOTP />} />
+        <Route path="/changePassword" element={<ChangePassword />} />
+        <Route path="/about-us" element={<AboutUs />} />
+        <Route path="/terms-conditions" element={<TermsConditions />} />
+        <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+        <Route path="/refund-policy" element={<RefundPolicy />} />
+        <Route path="/contact" element={<Contact />} />
+      </Routes>
+
+      {isHeaderFooterShow && <Footer />}
+      {isOpenProductModal && <ProductModal data={productData} />}
+    </MyContext.Provider>
   );
 }
 
 export default App;
-
 export { MyContext };

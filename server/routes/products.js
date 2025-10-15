@@ -1,3 +1,4 @@
+// routes/products.js
 const { Category } = require("../models/category.js");
 const { Product } = require("../models/products.js");
 const { MyList } = require("../models/myList");
@@ -40,9 +41,47 @@ const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
 });
 
-// -------- Helper --------
+// -------- Helpers --------
 const toImageUrls = (filenames = []) =>
-  filenames.map((name) => `${BASE_URL}/uploads/products/${name}`);
+  filenames.map((name) =>
+    String(name).startsWith("http")
+      ? name
+      : `${BASE_URL}/uploads/products/${name}`
+  );
+
+const parseIntOr = (v, d) => {
+  const n = parseInt(v, 10);
+  return Number.isFinite(n) ? n : d;
+};
+
+const normalizeLocationFilter = (location) => {
+  if (!location || location === "All") return {};
+  // Your schema stores either string or [{value,label}] — handle both
+  return {
+    $or: [
+      { location: location }, // string
+      { "location.value": location }, // array of objects
+    ],
+  };
+};
+
+const buildBaseQuery = ({ catId, subCatId, location }) => {
+  const q = { isActive: { $ne: false } };
+  if (catId) q.catId = catId;
+  if (subCatId) q.subCatId = subCatId;
+  Object.assign(q, normalizeLocationFilter(location));
+  return q;
+};
+
+const envelope = ({ products, total, page, perPage }) => ({
+  products: products.map((p) => ({
+    ...p,
+    images: toImageUrls(p.images || []),
+  })),
+  total,
+  page,
+  perPage,
+});
 
 // ---------------- UPLOAD ----------------
 router.post("/upload", (req, res) => {
@@ -63,21 +102,19 @@ router.post("/upload", (req, res) => {
 // ---------------- CREATE PRODUCT ----------------
 router.post("/create", async (req, res) => {
   try {
-    // Validate category
     const category = await Category.findById(req.body.category);
-    if (!category) {
-      return res.status(404).send("Invalid Category!");
-    }
+    if (!category) return res.status(404).send("Invalid Category!");
 
-    // Validate required fields
     if (!req.body.images || req.body.images.length === 0) {
-      return res.status(400).json({ success: false, message: "At least one image is required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "At least one image is required" });
     }
 
     const product = new Product({
       name: req.body.name,
       description: req.body.description,
-      images: req.body.images, // ✅ filenames array directly
+      images: req.body.images,
       brand: req.body.brand,
       price: req.body.price,
       oldPrice: req.body.oldPrice,
@@ -86,7 +123,7 @@ router.post("/create", async (req, res) => {
       subCat: req.body.subCat,
       subCatId: req.body.subCatId,
       subCatName: req.body.subCatName,
-      category: req.body.category, // ✅ ObjectId reference
+      category: req.body.category,
       countInStock: req.body.countInStock,
       rating: req.body.rating,
       isFeatured: req.body.isFeatured,
@@ -94,7 +131,8 @@ router.post("/create", async (req, res) => {
       productRam: req.body.productRam,
       size: req.body.size,
       productWeight: req.body.productWeight,
-      location: req.body.location && req.body.location !== "" ? req.body.location : "All",
+      location:
+        req.body.location && req.body.location !== "" ? req.body.location : "All",
     });
 
     const saved = await product.save();
@@ -105,105 +143,183 @@ router.post("/create", async (req, res) => {
   }
 });
 
-// ---------------- GET ALL PRODUCTS ----------------
+// ---------------- GET (generic with pagination) ----------------
+// Supports: ?catId= | ?subCatId= | ?location= | ?page= | ?perPage=
 router.get("/", async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const perPage = parseInt(req.query.perPage) || 10;
-    const totalPosts = await Product.countDocuments();
-    const totalPages = Math.ceil(totalPosts / perPage);
+    const page = Math.max(1, parseIntOr(req.query.page, 1));
+    const perPage = Math.min(100, Math.max(1, parseIntOr(req.query.perPage, 10)));
 
-    let query = {};
-    if (req.query.catId) query.catId = req.query.catId;
-    if (req.query.subCatId) query.subCatId = req.query.subCatId;
-
-    const products = await Product.find(query)
-      .populate("category")
-      .skip((page - 1) * perPage)
-      .limit(perPage);
-
-    const withUrls = products.map((p) => ({
-      ...p.toObject(),
-      images: toImageUrls(p.images),
-    }));
-
-    res.status(200).json({
-      products: withUrls,
-      totalPages,
-      page,
+    const query = buildBaseQuery({
+      catId: req.query.catId,
+      subCatId: req.query.subCatId,
+      location: req.query.location,
     });
+
+    const [total, products] = await Promise.all([
+      Product.countDocuments(query),
+      Product.find(query)
+        .populate("category")
+        .sort({ createdAt: -1, _id: -1 })
+        .skip((page - 1) * perPage)
+        .limit(perPage)
+        .lean(),
+    ]);
+
+    return res.json(envelope({ products, total, page, perPage }));
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// ---------------- CATEGORY FILTERS ----------------
+// ---------------- CATEGORY FILTERS (now paginated + location) ----------------
 router.get("/catName", async (req, res) => {
   try {
-    const products = await Product.find({ catName: req.query.catName }).populate("category");
-    res.json({
-      products: products.map((p) => ({ ...p.toObject(), images: toImageUrls(p.images) })),
-    });
+    const page = Math.max(1, parseIntOr(req.query.page, 1));
+    const perPage = Math.min(100, Math.max(1, parseIntOr(req.query.perPage, 10)));
+    const location = req.query.location;
+
+    const query = {
+      catName: req.query.catName,
+      ...normalizeLocationFilter(location),
+    };
+
+    const [total, products] = await Promise.all([
+      Product.countDocuments(query),
+      Product.find(query)
+        .populate("category")
+        .sort({ createdAt: -1, _id: -1 })
+        .skip((page - 1) * perPage)
+        .limit(perPage)
+        .lean(),
+    ]);
+
+    res.json(envelope({ products, total, page, perPage }));
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
+// GET /api/products/catId?catId=...&location=...&page=...&perPage=...
 router.get("/catId", async (req, res) => {
   try {
-    const products = await Product.find({ catId: req.query.catId }).populate("category");
-    res.json({
-      products: products.map((p) => ({ ...p.toObject(), images: toImageUrls(p.images) })),
+    const page = Math.max(1, parseIntOr(req.query.page, 1));
+    const perPage = Math.min(100, Math.max(1, parseIntOr(req.query.perPage, 10)));
+    const query = buildBaseQuery({
+      catId: req.query.catId,
+      location: req.query.location,
     });
+
+    const [total, products] = await Promise.all([
+      Product.countDocuments(query),
+      Product.find(query)
+        .populate("category")
+        .sort({ createdAt: -1, _id: -1 })
+        .skip((page - 1) * perPage)
+        .limit(perPage)
+        .lean(),
+    ]);
+
+    res.json(envelope({ products, total, page, perPage }));
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
+// GET /api/products/subCatId?subCatId=...&location=...&page=...&perPage=...
 router.get("/subCatId", async (req, res) => {
   try {
-    const products = await Product.find({ subCatId: req.query.subCatId }).populate("category");
-    res.json({
-      products: products.map((p) => ({ ...p.toObject(), images: toImageUrls(p.images) })),
+    const page = Math.max(1, parseIntOr(req.query.page, 1));
+    const perPage = Math.min(100, Math.max(1, parseIntOr(req.query.perPage, 10)));
+    const query = buildBaseQuery({
+      subCatId: req.query.subCatId,
+      location: req.query.location,
     });
+
+    const [total, products] = await Promise.all([
+      Product.countDocuments(query),
+      Product.find(query)
+        .populate("category")
+        .sort({ createdAt: -1, _id: -1 })
+        .skip((page - 1) * perPage)
+        .limit(perPage)
+        .lean(),
+    ]);
+
+    res.json(envelope({ products, total, page, perPage }));
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// ---------------- FILTER BY PRICE ----------------
+// ---------------- FILTER BY PRICE (Mongo-side, paginated) ----------------
+// /api/products/fiterByPrice?minPrice=&maxPrice=&catId=|subCatId=&location=&page=&perPage=
 router.get("/fiterByPrice", async (req, res) => {
   try {
-    const { minPrice, maxPrice, catId, subCatId } = req.query;
-    let query = {};
-    if (catId) query.catId = catId;
-    if (subCatId) query.subCatId = subCatId;
+    const page = Math.max(1, parseIntOr(req.query.page, 1));
+    const perPage = Math.min(100, Math.max(1, parseIntOr(req.query.perPage, 10)));
 
-    let products = await Product.find(query).populate("category");
+    const min = Number(req.query.minPrice);
+    const max = Number(req.query.maxPrice);
 
-    products = products.filter((p) => {
-      if (minPrice && p.price < parseInt(minPrice)) return false;
-      if (maxPrice && p.price > parseInt(maxPrice)) return false;
-      return true;
+    const base = buildBaseQuery({
+      catId: req.query.catId,
+      subCatId: req.query.subCatId,
+      location: req.query.location,
     });
 
-    res.json(products.map((p) => ({ ...p.toObject(), images: toImageUrls(p.images) })));
+    if (!Number.isNaN(min) || !Number.isNaN(max)) {
+      base.price = {};
+      if (!Number.isNaN(min)) base.price.$gte = min;
+      if (!Number.isNaN(max)) base.price.$lte = max;
+    }
+
+    const [total, products] = await Promise.all([
+      Product.countDocuments(base),
+      Product.find(base)
+        .populate("category")
+        .sort({ createdAt: -1, _id: -1 })
+        .skip((page - 1) * perPage)
+        .limit(perPage)
+        .lean(),
+    ]);
+
+    res.json(envelope({ products, total, page, perPage }));
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// ---------------- FILTER BY RATING ----------------
+// ---------------- FILTER BY RATING (>= rating, paginated) ----------------
+// /api/products/rating?rating=&catId=|subCatId=&location=&page=&perPage=
 router.get("/rating", async (req, res) => {
   try {
-    const { rating, catId, subCatId } = req.query;
-    let query = { rating };
-    if (catId) query.catId = catId;
-    if (subCatId) query.subCatId = subCatId;
+    const page = Math.max(1, parseIntOr(req.query.page, 1));
+    const perPage = Math.min(100, Math.max(1, parseIntOr(req.query.perPage, 10)));
 
-    const products = await Product.find(query).populate("category");
+    const rating = Number(req.query.rating);
+    const base = buildBaseQuery({
+      catId: req.query.catId,
+      subCatId: req.query.subCatId,
+      location: req.query.location,
+    });
 
-    res.json(products.map((p) => ({ ...p.toObject(), images: toImageUrls(p.images) })));
+    if (!Number.isNaN(rating)) {
+      // usually you want >= selected rating
+      base.rating = { $gte: rating };
+    }
+
+    const [total, products] = await Promise.all([
+      Product.countDocuments(base),
+      Product.find(base)
+        .populate("category")
+        .sort({ createdAt: -1, _id: -1 })
+        .skip((page - 1) * perPage)
+        .limit(perPage)
+        .lean(),
+    ]);
+
+    res.json(envelope({ products, total, page, perPage }));
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -223,15 +339,19 @@ router.get("/get/count", async (req, res) => {
 router.get("/featured", async (req, res) => {
   try {
     const { location } = req.query;
-    let products = await Product.find({ isFeatured: true }).populate("category");
+    const base = { isFeatured: true, ...normalizeLocationFilter(location) };
 
-    if (location && location !== "All") {
-      products = products.filter((p) =>
-        Array.isArray(p.location) ? p.location.some((l) => l.value === location) : p.location === location
-      );
-    }
+    const products = await Product.find(base)
+      .populate("category")
+      .sort({ createdAt: -1, _id: -1 })
+      .lean();
 
-    res.json(products.map((p) => ({ ...p.toObject(), images: toImageUrls(p.images) })));
+    res.json(
+      products.map((p) => ({
+        ...p,
+        images: toImageUrls(p.images || []),
+      }))
+    );
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -249,13 +369,12 @@ router.get("/recentlyViewd", async (req, res) => {
 
 router.post("/recentlyViewd", async (req, res) => {
   try {
-    let findProduct = await RecentlyViewd.find({ prodId: req.body.id });
-    if (findProduct.length === 0) {
-      let product = new RecentlyViewd({ ...req.body });
-      product = await product.save();
+    const found = await RecentlyViewd.find({ prodId: req.body.id });
+    if (found.length === 0) {
+      const product = await new RecentlyViewd({ ...req.body }).save();
       res.status(201).json(product);
     } else {
-      res.json(findProduct[0]);
+      res.json(found[0]);
     }
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -273,39 +392,31 @@ router.get("/:id", async (req, res) => {
       });
     }
 
-    const productObj = product.toObject();
-
-    // convert filenames → URLs if stored locally
-    const imageUrls = Array.isArray(productObj.images)
-      ? productObj.images.map((img) =>
-          img.startsWith("http")
-            ? img // already cloudinary URL
-            : `${process.env.BASE_URL || "http://localhost:8000"}/uploads/products/${img}`
-        )
-      : [];
+    const p = product.toObject();
+    const imageUrls = Array.isArray(p.images) ? toImageUrls(p.images) : [];
 
     res.status(200).json({
-      id: productObj._id,
-      name: productObj.name,
-      description: productObj.description,
+      id: p._id,
+      name: p.name,
+      description: p.description,
       images: imageUrls,
-      brand: productObj.brand,
-      price: productObj.price,
-      oldPrice: productObj.oldPrice,
-      catId: productObj.catId,
-      catName: productObj.catName,
-      subCatId: productObj.subCatId,
-      subCat: productObj.subCat,
-      subCatName: productObj.subCatName,
-      category: productObj.category,
-      countInStock: productObj.countInStock,
-      rating: productObj.rating,
-      isFeatured: productObj.isFeatured,
-      discount: productObj.discount,
-      productRam: productObj.productRam || [],
-      size: productObj.size || [],
-      productWeight: productObj.productWeight || [],
-      location: productObj.location || [],
+      brand: p.brand,
+      price: p.price,
+      oldPrice: p.oldPrice,
+      catId: p.catId,
+      catName: p.catName,
+      subCatId: p.subCatId,
+      subCat: p.subCat,
+      subCatName: p.subCatName,
+      category: p.category,
+      countInStock: p.countInStock,
+      rating: p.rating,
+      isFeatured: p.isFeatured,
+      discount: p.discount,
+      productRam: p.productRam || [],
+      size: p.size || [],
+      productWeight: p.productWeight || [],
+      location: p.location || [],
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -315,7 +426,7 @@ router.get("/:id", async (req, res) => {
 // ---------------- DELETE IMAGE ----------------
 router.delete("/deleteImage", async (req, res) => {
   try {
-    const img = req.query.img; // filename
+    const img = req.query.img;
     if (!img) return res.status(400).json({ success: false, message: "img query required" });
 
     const filePath = path.join(UPLOAD_DIR, img);
@@ -336,8 +447,7 @@ router.delete("/:id", async (req, res) => {
     if (!product)
       return res.status(404).json({ success: false, message: "Product not found" });
 
-    // delete local images
-    for (const img of product.images) {
+    for (const img of product.images || []) {
       const filePath = path.join(UPLOAD_DIR, img);
       if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
     }
