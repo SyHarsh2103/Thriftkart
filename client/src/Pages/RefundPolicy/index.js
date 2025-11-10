@@ -60,7 +60,7 @@ const RefundPolicy = () => {
       <h3>8. Contact Us</h3>
       <p>For return or refund queries, reach us at:</p>
       <p>📧 <strong>support@thriftkart.com</strong></p>
-      <p>📍 Thriftkart Pvt. Ltd., Ahmedabad, Gujarat, India</p>
+      <p>📍 Thriftkart, Ahmedabad, Gujarat, India</p>
     </div>
   );
 };

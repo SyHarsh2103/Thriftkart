@@ -46,7 +46,7 @@ const PrivacyPolicy = () => {
       <h3>11. Contact Us</h3>
       <p>If you have any questions, contact us at:</p>
       <p>📧 <strong>privacy@thriftkart.com</strong></p>
-      <p>📍 Thriftkart Pvt. Ltd., Ahmedabad, Gujarat, India</p>
+      <p>📍 Thriftkart, Ahmedabad, Gujarat, India</p>
     </div>
   );
 };

@@ -64,7 +64,7 @@ const AboutUs = () => {
       <section className="about-section">
         <h3><FaMapMarkerAlt className="icon" /> Contact Us</h3>
         <p>📧 <strong>support@thriftkart.com</strong></p>
-        <p>📍 Thriftkart Pvt. Ltd., Ahmedabad, Gujarat, India</p>
+        <p>📍 Thriftkart, Ahmedabad, Gujarat, India</p>
       </section>
     </div>
   );

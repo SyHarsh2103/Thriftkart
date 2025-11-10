@@ -45,31 +45,19 @@ const Home = () => {
     setselectedCat(cat);
   };
 
+  // Initial load: banners + products (no location dependency)
   useEffect(() => {
     window.scrollTo(0, 0);
     context.setisHeaderFooterShow(true);
-    setselectedCat(context.categoryData[0]?.name);
+    context.setEnableFilterTab(false);
+    context.setIsBottomShow(true);
 
-    const location = localStorage.getItem("location");
-
-    if (location) {
-      fetchDataFromApi(`/api/products/featured?location=${location}`).then(
-        (res) => {
-          setFeaturedProducts(Array.isArray(res) ? res : []);
-        }
-      );
-
-      fetchDataFromApi(
-        `/api/products?page=1&perPage=16&location=${location}`
-      ).then((res) => {
-        setProductsData(res);
-      });
-    }
-
+    // Home banner
     fetchDataFromApi("/api/homeBanner").then((res) => {
       setHomeSlides(res);
     });
 
+    // Generic banners
     fetchDataFromApi("/api/banners").then((res) => {
       setBannerList(res);
     });
@@ -82,10 +70,21 @@ const Home = () => {
       setHomeBottomBanners(res);
     });
 
-    context.setEnableFilterTab(false);
-    context.setIsBottomShow(true);
+    // New Products (no location)
+    setIsLoading(true);
+    fetchDataFromApi(`/api/products?page=1&perPage=16`)
+      .then((res) => {
+        setProductsData(res);
+      })
+      .finally(() => setIsLoading(false));
+
+    // Featured products (no location)
+    fetchDataFromApi(`/api/products/featured`).then((res) => {
+      setFeaturedProducts(Array.isArray(res) ? res : []);
+    });
   }, []);
 
+  // Set default category + random category products
   useEffect(() => {
     if (context.categoryData[0]) {
       setselectedCat(context.categoryData[0].name);
@@ -97,9 +96,7 @@ const Home = () => {
       );
 
       fetchDataFromApi(
-        `/api/products/catId?catId=${
-          context.categoryData[randomIndex]?._id
-        }&location=${localStorage.getItem("location")}`
+        `/api/products/catId?catId=${context.categoryData[randomIndex]?._id}`
       ).then((res) => {
         setRandomCatProducts({
           catName: context.categoryData[randomIndex]?.name,
@@ -110,17 +107,17 @@ const Home = () => {
     }
   }, [context.categoryData]);
 
+  // Filtered products (Popular Products tabs) – no location
   useEffect(() => {
     if (selectedCat) {
       setIsLoading(true);
-      const location = localStorage.getItem("location");
-      fetchDataFromApi(
-        `/api/products/catName?catName=${selectedCat}&location=${location}`
-      ).then((res) => {
-        setFilterData(res?.products || []);
-        setIsLoading(false);
-        filterSlider?.current?.swiper?.slideTo(0);
-      });
+      fetchDataFromApi(`/api/products/catName?catName=${selectedCat}`).then(
+        (res) => {
+          setFilterData(res?.products || []);
+          setIsLoading(false);
+          filterSlider?.current?.swiper?.slideTo(0);
+        }
+      );
     }
   }, [selectedCat]);
 

@@ -80,7 +80,7 @@ const TermsConditions = () => {
         For any questions or concerns regarding these Terms, please contact us at:
       </p>
       <p>📧 <strong>support@thriftkart.com</strong></p>
-      <p>📍 Thriftkart Pvt. Ltd., Ahmedabad, Gujarat, India</p>
+      <p>📍 Thriftkart, Ahmedabad, Gujarat, India</p>
     </div>
   );
 };

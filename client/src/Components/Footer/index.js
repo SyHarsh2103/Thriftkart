@@ -57,7 +57,7 @@ const Footer = () => {
 
             <div className="col d-flex align-items-center">
               <span><TbTruckDelivery /></span>
-              <span className="ml-2">Free delivery for order over $70</span>
+              <span className="ml-2">Free Shipping Available</span>
             </div>
 
             <div className="col d-flex align-items-center">

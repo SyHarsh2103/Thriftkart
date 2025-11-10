@@ -88,7 +88,7 @@ const Contact = () => {
         <div className="col-md-5">
           <div className="contact-info">
             <h3>Our Office</h3>
-            <p>📍 Thriftkart Pvt. Ltd., Ahmedabad, Gujarat, India</p>
+            <p>📍 Thriftkart, Ahmedabad, Gujarat, India</p>
             <p>📧 support@thriftkart.com</p>
             <p>📞 +91 98765 43210</p>
 
