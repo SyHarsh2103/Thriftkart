@@ -11,7 +11,6 @@ import Button from "@mui/material/Button";
 import { IoMailOutline } from "react-icons/io5";
 import { useState } from "react";
 
-
 const Footer = () => {
   const [bannerList, setBannerList] = useState([]);
 
@@ -22,9 +21,7 @@ const Footer = () => {
         <div className="container">
           <div className="row">
             <div className="col-md-6">
-              <p className="text-white mb-1">
-                $20 discount for your first order
-              </p>
+              <p className="text-white mb-1">$20 discount for your first order</p>
               <h3 className="text-white">Join our newsletter and get...</h3>
               <p className="text-light">
                 Join our email subscription now to get updates on
@@ -57,7 +54,7 @@ const Footer = () => {
 
             <div className="col d-flex align-items-center">
               <span><TbTruckDelivery /></span>
-              <span className="ml-2">Free Shipping Available</span>
+              <span className="ml-2">4-5 Days Shipping</span>
             </div>
 
             <div className="col d-flex align-items-center">
@@ -73,73 +70,32 @@ const Footer = () => {
 
           {/* Links Section */}
           <div className="row mt-5 linksWrap">
-            <div className="col">
-              <h5>CLOTHING</h5>
-              <ul>
-                <li><Link to="#">Men's Wear</Link></li>
-                <li><Link to="#">Women's Wear</Link></li>
-                <li><Link to="#">Kids' Wear</Link></li>
-                <li><Link to="#">Ethnic & Traditional</Link></li>
-                <li><Link to="#">Casual & Formal</Link></li>
-                <li><Link to="#">Sportswear</Link></li>
-                <li><Link to="#">Accessories</Link></li>
-              </ul>
+
+            {/* 
+            ORIGINAL CATEGORY COLUMNS (KEEPED FOR FUTURE USE)
+            -------------------------------------------------
+            <div className="col"> ... </div>
+            <div className="col"> ... </div>
+            <div className="col"> ... </div>
+            <div className="col"> ... </div>
+            <div className="col"> ... </div>
+            */}
+
+            {/* New Thriftkart Info Layout */}
+            <div className="col-md-6">
+              <h5>ABOUT THRIFTKART</h5>
+              <p className="text-muted">
+                Thriftkart brings quality products at unbeatable prices with fast
+                delivery, trusted service, and a smooth modern shopping
+                experience across India.
+              </p>
+              <p className="text-muted mb-0">
+                Our mission is to make online shopping affordable, reliable, and
+                enjoyable for every customer.
+              </p>
             </div>
 
-            <div className="col">
-              <h5>MOBILE ACCESSORIES</h5>
-              <ul>
-                <li><Link to="#">Phone Cases</Link></li>
-                <li><Link to="#">Chargers & Cables</Link></li>
-                <li><Link to="#">Power Banks</Link></li>
-                <li><Link to="#">Earphones & Headphones</Link></li>
-                <li><Link to="#">Screen Protectors</Link></li>
-                <li><Link to="#">Smartwatches</Link></li>
-                <li><Link to="#">Car Accessories</Link></li>
-              </ul>
-            </div>
-
-            <div className="col">
-              <h5>ELECTRONICS</h5>
-              <ul>
-                <li><Link to="#">Laptops & Computers</Link></li>
-                <li><Link to="#">Smartphones</Link></li>
-                <li><Link to="#">Televisions</Link></li>
-                <li><Link to="#">Cameras</Link></li>
-                <li><Link to="#">Home Appliances</Link></li>
-                <li><Link to="#">Audio Systems</Link></li>
-                <li><Link to="#">Gaming Consoles</Link></li>
-              </ul>
-            </div>
-
-            <div className="col">
-              <h5>HOME LIGHTING</h5>
-              <ul>
-                <li><Link to="#">LED Bulbs</Link></li>
-                <li><Link to="#">Ceiling Lights</Link></li>
-                <li><Link to="#">Wall Lamps</Link></li>
-                <li><Link to="#">Table Lamps</Link></li>
-                <li><Link to="#">Decorative Lights</Link></li>
-                <li><Link to="#">Outdoor Lighting</Link></li>
-                <li><Link to="#">Smart Lighting</Link></li>
-              </ul>
-            </div>
-
-            <div className="col">
-              <h5>HANDICRAFTS</h5>
-              <ul>
-                <li><Link to="#">Wooden Handicrafts</Link></li>
-                <li><Link to="#">Metal Art</Link></li>
-                <li><Link to="#">Clay & Ceramic</Link></li>
-                <li><Link to="#">Textile Handicrafts</Link></li>
-                <li><Link to="#">Paintings</Link></li>
-                <li><Link to="#">Jewelry Handicrafts</Link></li>
-                <li><Link to="#">Home Decor</Link></li>
-              </ul>
-            </div>
-
-            {/* New Policies/Company Section */}
-            <div className="col">
+            <div className="col-md-6">
               <h5>COMPANY & POLICIES</h5>
               <ul>
                 <li><Link to="/about-us">About Us</Link></li>

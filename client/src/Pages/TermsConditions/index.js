@@ -35,7 +35,7 @@ const TermsConditions = () => {
       <p>Thriftkart reserves the right to cancel orders in case of payment issues, suspected fraud, or stock unavailability.</p>
 
       <h3>5. Shipping & Delivery</h3>
-      <p>Delivery timelines are estimates and may vary depending on location and external factors.</p>
+      <p>Delivery timelines are 4-5 days minimum and may vary depending on location and external factors.</p>
       <p>Delays caused by logistics providers, natural calamities, or unforeseen events are beyond our control.</p>
       <p>You must provide an accurate delivery address. Thriftkart is not responsible for failed deliveries due to incorrect details.</p>
 
