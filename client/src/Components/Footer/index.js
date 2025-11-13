@@ -10,6 +10,11 @@ import newsLetterImg from "../../assets/images/newsletter.png";
 import Button from "@mui/material/Button";
 import { IoMailOutline } from "react-icons/io5";
 import { useState } from "react";
+import { FaYoutube } from "react-icons/fa";
+import { FaPinterestP } from "react-icons/fa";
+import { FaThreads } from "react-icons/fa6";
+import { FaSnapchatGhost } from "react-icons/fa";
+
 
 const Footer = () => {
   const [bannerList, setBannerList] = useState([]);
@@ -112,16 +117,49 @@ const Footer = () => {
             <p className="mb-0">Copyright 2024. All rights reserved</p>
             <ul className="list list-inline ml-auto mb-0 socials">
               <li className="list-inline-item">
-                <Link to="#"><FaFacebookF /></Link>
+                <Link to="https://www.facebook.com/share/1WxAES3ySy/?mibextid=wwXIfr">
+                  <FaFacebookF />
+                </Link>
               </li>
+
               <li className="list-inline-item">
-                <Link to="#"><FaTwitter /></Link>
+                <Link to="https://x.com/thriftkartoffi1">
+                  <FaTwitter />
+                </Link>
               </li>
+
               <li className="list-inline-item">
-                <Link to="#"><FaInstagram /></Link>
+                <Link to="https://www.instagram.com/thriftkartonlineshop?igsh=MW42bjE0Y3FhM2lreA==">
+                  <FaInstagram />
+                </Link>
               </li>
+
+              <li className="list-inline-item">
+                <Link to="https://www.youtube.com/@thriftkartproducts564">
+                  <FaYoutube />
+                </Link>
+              </li>
+
+              <li className="list-inline-item">
+                <Link to="https://in.pinterest.com/thriftkart/_boards/">
+                  <FaPinterestP />
+                </Link>
+              </li>
+
+              <li className="list-inline-item">
+                <Link to="https://www.threads.net/@thriftkartonlineshop">
+                  <FaThreads />
+                </Link>
+              </li>
+
+              <li className="list-inline-item">
+              <Link to="https://www.snapchat.com/add/thriftkart.com?share_id=9XCVTPFOwSk&locale=en-IN">
+                <FaSnapchatGhost />
+              </Link>
+            </li>
             </ul>
           </div>
+
         </div>
       </footer>
     </>
