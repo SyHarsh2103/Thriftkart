@@ -2,91 +2,186 @@ import { useContext, useEffect, useState } from "react";
 import Logo from "../../assets/images/logo.png";
 import patern from "../../assets/images/pattern.webp";
 import { MyContext } from "../../App";
-import { MdEmail } from "react-icons/md";
-import { RiLockPasswordFill } from "react-icons/ri";
-import { IoMdEye } from "react-icons/io";
-import { IoMdEyeOff } from "react-icons/io";
 import Button from "@mui/material/Button";
-import { Link } from "react-router-dom";
-
-import { useNavigate } from "react-router-dom";
-import { postData } from "../../utils/api";
+import { Link, useNavigate } from "react-router-dom";
 import CircularProgress from "@mui/material/CircularProgress";
 import OtpBox from "../../components/OtpBox";
+import { postData } from "../../utils/api";
 
 const VerifyAccount = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [otp, setOtp] = useState("");
 
-  const history = useNavigate();
+  const navigate = useNavigate();
   const context = useContext(MyContext);
 
+  const userEmail = localStorage.getItem("userEmail") || "";
+
   useEffect(() => {
+    // hide admin header + sidebar on this screen
     context.setisHideSidebarAndHeader(true);
-  }, []);
+
+    // if no email stored, user shouldn't be here
+    if (!userEmail) {
+      context.setAlertBox({
+        open: true,
+        error: true,
+        msg: "Session expired. Please sign up / log in again.",
+      });
+      navigate("/login");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userEmail]);
 
   const handleOtpChange = (value) => {
     setOtp(value);
   };
 
-  const verify = (e) => {
+  const verify = async (e) => {
     e.preventDefault();
-    const obj = {
-      otp: otp,
-      email: localStorage.getItem("userEmail"),
+
+    if (!otp || otp.trim().length === 0) {
+      context.setAlertBox({
+        open: true,
+        error: true,
+        msg: "Please enter OTP",
+      });
+      return;
+    }
+
+    if (!userEmail) {
+      context.setAlertBox({
+        open: true,
+        error: true,
+        msg: "Session expired. Please sign up / log in again.",
+      });
+      navigate("/login");
+      return;
+    }
+
+    const payload = {
+      otp: otp.trim(),
+      email: userEmail,
     };
 
-    postData(`/api/user/verifyemail`, obj).then((res) => {
-      if (res?.success === true) {
+    try {
+      setIsLoading(true);
+      const res = await postData("/api/user/verifyemail", payload);
+
+      if (res?.success) {
         context.setAlertBox({
           open: true,
           error: false,
-          msg: res?.message,
+          msg: res?.message || "Account verified successfully!",
         });
-        setIsLoading(false);
         localStorage.removeItem("userEmail");
-        history("/login");
+        navigate("/login");
       } else {
         context.setAlertBox({
           open: true,
           error: true,
-          msg: res?.message,
+          msg: res?.message || res?.msg || "Invalid or expired OTP",
         });
-        setIsLoading(false);
       }
-    });
+    } catch (err) {
+      console.error(err);
+      context.setAlertBox({
+        open: true,
+        error: true,
+        msg: err?.message || "Verification failed. Please try again.",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const resendOtp = async () => {
+    if (!userEmail) {
+      context.setAlertBox({
+        open: true,
+        error: true,
+        msg: "Session expired. Please sign up / log in again.",
+      });
+      navigate("/login");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const res = await postData("/api/user/verifyAccount/resendOtp", {
+        email: userEmail,
+      });
+
+      if (res?.success) {
+        context.setAlertBox({
+          open: true,
+          error: false,
+          msg: res?.message || "OTP resent to your email.",
+        });
+      } else {
+        context.setAlertBox({
+          open: true,
+          error: true,
+          msg: res?.message || res?.msg || "Failed to resend OTP",
+        });
+      }
+    } catch (err) {
+      console.error(err);
+      context.setAlertBox({
+        open: true,
+        error: true,
+        msg: err?.message || "Failed to resend OTP",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <>
-      <img src={patern} className="loginPatern" />
+      <img src={patern} className="loginPatern" alt="" />
       <section className="loginSection">
         <div className="loginBox">
           <Link to={"/"} className="d-flex align-items-center flex-column logo">
-            <img src={Logo} />
+            <img src={Logo} alt="Logo" />
             <span className="ml-2">ECOMMERCE</span>
           </Link>
+
           <div className="wrapper mt-3 card border text-center">
-            <form  onSubmit={verify}>
-              <img src={"/shield.png"} width="80px"/>
+            <form onSubmit={verify}>
+              <img src={"/shield.png"} width="80px" alt="shield" />
               <p className="text-center mt-3">
-                OTP has been sent to <b>{localStorage.getItem("userEmail")}</b>
+                OTP has been sent to <b>{userEmail}</b>
               </p>
 
               <OtpBox length={6} onChange={handleOtpChange} />
 
               <div className="form-group mt-3 row">
-                <Button type="submit" className="btn-blue btn-lg w-100 btn-big">
-                  {isLoading === true ? <CircularProgress /> : "Verify OTP "}
+                <Button
+                  type="submit"
+                  className="btn-blue btn-lg w-100 btn-big"
+                  disabled={isLoading}
+                >
+                  {isLoading ? <CircularProgress size={24} /> : "Verify OTP"}
                 </Button>
               </div>
             </form>
           </div>
 
           <div className="wrapper mt-3 card border footer p-3">
-            <span className="text-center">
-              <Link to={"/"} className="link color ml-2">
+            <span className="text-center d-flex flex-column flex-md-row justify-content-center">
+              <Button
+                type="button"
+                variant="text"
+                className="link color"
+                onClick={resendOtp}
+                disabled={isLoading}
+              >
                 Resend OTP
+              </Button>
+              <span className="mx-2 d-none d-md-inline">•</span>
+              <Link to={"/login"} className="link color ml-md-2 mt-2 mt-md-0">
+                Back to Login
               </Link>
             </span>
           </div>

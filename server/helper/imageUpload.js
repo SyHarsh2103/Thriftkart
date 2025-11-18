@@ -1,44 +1,102 @@
-const express = require('express');
+// server/helper/imageUpload.js
+const express = require("express");
+const { ImageUpload } = require("../models/imageUpload.js");
+
 const router = express.Router();
-const { ImageUpload } = require('../models/imageUpload.js');
 
-router.get(`/`, async (req, res) => {
+// ===== Auth helpers (req.auth is set by authJwt / express-jwt) =====
+function requireAuth(req, res) {
+  if (!req.auth) {
+    res.status(401).json({ error: true, msg: "Unauthorized" });
+    return false;
+  }
+  return true;
+}
 
-    try {
-    
-        const imageUploadList = await ImageUpload.find();
+function requireAdmin(req, res) {
+  if (!req.auth) {
+    res.status(401).json({ error: true, msg: "Unauthorized" });
+    return false;
+  }
+  if (!req.auth.isAdmin) {
+    res.status(403).json({ error: true, msg: "Admin only" });
+    return false;
+  }
+  return true;
+}
 
+// Small helper
+function parseIntOr(v, d) {
+  const n = parseInt(v, 10);
+  return Number.isFinite(n) ? n : d;
+}
 
-        if (!imageUploadList) {
-            res.status(500).json({ success: false })
-        }
+// =====================================================
+// =============== GET IMAGE UPLOADS (ADMIN) ===========
+// =====================================================
+//
+// GET /api/imageUpload
+// Optional: ?page=&perPage=
+router.get("/", async (req, res) => {
+  if (!requireAdmin(req, res)) return;
 
-        return res.status(200).json(imageUploadList);
+  try {
+    const page = Math.max(1, parseIntOr(req.query.page, 1));
+    const perPage = Math.min(100, Math.max(1, parseIntOr(req.query.perPage, 50)));
 
-    } catch (error) {
-        res.status(500).json({ success: false })
-    }
+    const [total, imageUploadList] = await Promise.all([
+      ImageUpload.countDocuments(),
+      ImageUpload.find()
+        .sort({ createdAt: -1, _id: -1 })
+        .skip((page - 1) * perPage)
+        .limit(perPage)
+        .lean(),
+    ]);
 
-
+    return res.status(200).json({
+      data: imageUploadList,
+      total,
+      page,
+      perPage,
+      totalPages: Math.ceil(total / perPage),
+    });
+  } catch (error) {
+    console.error("Get ImageUpload error:", error);
+    res.status(500).json({ success: false });
+  }
 });
 
+// =====================================================
+// =========== DELETE ALL IMAGE RECORDS (ADMIN) ========
+// =====================================================
+//
+// DELETE /api/imageUpload/deleteAllImages
+router.delete("/deleteAllImages", async (req, res) => {
+  if (!requireAdmin(req, res)) return;
 
-router.delete('/deleteAllImages', async (req, res) => {
+  try {
+    const images = await ImageUpload.find().lean();
 
-    const images = await ImageUpload.find();
-    let deletedImage;
-    
-    if (images.length !== 0) {
-        for (image of images) {
-            deletedImage = await ImageUpload.findByIdAndDelete(image.id);
-            //console.log(image)
-        }
+    if (!images.length) {
+      return res.status(200).json({
+        success: true,
+        message: "No images to delete",
+      });
     }
 
-    res.json(deletedImage)
-
+    const result = await ImageUpload.deleteMany({});
+    return res.status(200).json({
+      success: true,
+      message: "All image records deleted",
+      deletedCount: result.deletedCount ?? images.length,
+    });
+  } catch (err) {
+    console.error("deleteAllImages error:", err);
+    res.status(500).json({
+      success: false,
+      message: "Failed to delete images",
+    });
+  }
 });
-
 
 module.exports = router;
-

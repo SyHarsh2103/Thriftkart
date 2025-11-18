@@ -1,437 +1,501 @@
-const { Orders } = require('../models/orders');
-const express = require('express');
+const express = require("express");
+const { Orders } = require("../models/orders");
 const Razorpay = require("razorpay");
 const crypto = require("crypto");
+const rateLimit = require("express-rate-limit");
+
 const router = express.Router();
 
-// Initialize Razorpay instance
+const NODE_ENV = process.env.NODE_ENV || "development";
+
+// ===== Helpers for auth/roles (req.auth is set by express-jwt) =====
+function requireAuth(req, res) {
+  if (!req.auth) {
+    res.status(401).json({ error: true, msg: "Unauthorized" });
+    return false;
+  }
+  return true;
+}
+
+function requireAdmin(req, res) {
+  if (!req.auth) {
+    res.status(401).json({ error: true, msg: "Unauthorized" });
+    return false;
+  }
+  if (!req.auth.isAdmin) {
+    res.status(403).json({ error: true, msg: "Admin only" });
+    return false;
+  }
+  return true;
+}
+
+// ===== Razorpay init =====
+const HAS_RAZORPAY_CONFIG =
+  !!process.env.RAZORPAY_KEY_ID && !!process.env.RAZORPAY_KEY_SECRET;
+
+if (!HAS_RAZORPAY_CONFIG) {
+  console.warn(
+    "⚠️ RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET not set. Razorpay features may not work."
+  );
+}
+
 const razorpay = new Razorpay({
-    key_id: process.env.RAZORPAY_KEY_ID,
-    key_secret: process.env.RAZORPAY_KEY_SECRET,
-  });
+  key_id: process.env.RAZORPAY_KEY_ID || "",
+  key_secret: process.env.RAZORPAY_KEY_SECRET || "",
+});
+
+// ===== Rate limiters for payment endpoints =====
+const razorpayLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 50,                  // 50 requests per IP per 5 min
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Allowlist for admin filtering on GET /orders
+const ADMIN_FILTER_FIELDS = [
+  "status",
+  "userid",
+  "email",
+  "paymentType",
+  "paymentId",
+  "orderId",
+];
+
+// =====================================================
+// ================ SALES ANALYTICS (ADMIN) ============
+// =====================================================
 
 router.get(`/sales`, async (req, res) => {
-    try {
-        const currentYear = parseInt(req?.query?.year);
+  if (!requireAdmin(req, res)) return;
 
-        const ordersList = await Orders.find();
+  try {
+    const currentYear =
+      parseInt(req?.query?.year, 10) || new Date().getFullYear();
 
-        let totalSales = 0;
-        let monthlySales = [
-            {
-                month: 'JAN',
-                sale: 0
-            },
-            {
-                month: 'FEB',
-                sale: 0
-            },
-            {
-                month: 'MAR',
-                sale: 0
-            },
-            {
-                month: 'APRIL',
-                sale: 0
-            },
-            {
-                month: 'MAY',
-                sale: 0
-            },
-            {
-                month: 'JUNE',
-                sale: 0
-            },
-            {
-                month: 'JULY',
-                sale: 0
-            },
-            {
-                month: 'AUG',
-                sale: 0
-            },
-            {
-                month: 'SEP',
-                sale: 0
-            },
-            {
-                month: 'OCT',
-                sale: 0
-            },
-            {
-                month: 'NOV',
-                sale: 0
-            },
-            {
-                month: 'DEC',
-                sale: 0
-            },
-        ]
+    const ordersList = await Orders.find();
 
-        
+    let totalSales = 0;
+    const monthlySales = [
+      { month: "JAN", sale: 0 },
+      { month: "FEB", sale: 0 },
+      { month: "MAR", sale: 0 },
+      { month: "APRIL", sale: 0 },
+      { month: "MAY", sale: 0 },
+      { month: "JUNE", sale: 0 },
+      { month: "JULY", sale: 0 },
+      { month: "AUG", sale: 0 },
+      { month: "SEP", sale: 0 },
+      { month: "OCT", sale: 0 },
+      { month: "NOV", sale: 0 },
+      { month: "DEC", sale: 0 },
+    ];
 
-        //console.log(currentYear)
+    for (const order of ordersList) {
+      const amount = parseInt(order.amount, 10) || 0;
+      totalSales += amount;
 
-        for (let i = 0; i < ordersList.length; i++) {
-            totalSales = totalSales + parseInt(ordersList[i].amount);
-            const str = JSON.stringify(ordersList[i]?.date);
-            const year = str.substr(1, 4);
-            const monthStr = str.substr(6, 8);
-            const month = parseInt(monthStr.substr(0, 2));
+      const d = new Date(order.date || order.createdAt || Date.now());
+      const year = d.getFullYear();
+      const monthIndex = d.getMonth(); // 0-11
 
-            let amt = parseInt(ordersList[i].amount);
-
-            if (currentYear == year) {
-
-                if (month === 1) {
-                    monthlySales[0] = {
-                        month: 'JAN',
-                        sale: monthlySales[0].sale = parseInt(monthlySales[0].sale) + parseInt(ordersList[i].amount)
-                    }
-                }
-
-                if (month === 2) {
-
-                    monthlySales[1] = {
-                        month: 'FEB',
-                        sale: monthlySales[1].sale = parseInt(monthlySales[1].sale) + parseInt(ordersList[i].amount)
-                    }
-                }
-
-                if (month === 3) {
-                    monthlySales[2] = {
-                        month: 'MAR',
-                        sale: monthlySales[2].sale = parseInt(monthlySales[2].sale) + parseInt(ordersList[i].amount)
-                    }
-                }
-
-                if (month === 4) {
-                    monthlySales[3] = {
-                        month: 'APRIL',
-                        sale: monthlySales[3].sale = parseInt(monthlySales[3].sale) + parseInt(ordersList[i].amount)
-                    }
-                }
-
-                if (month === 5) {
-                    monthlySales[4] = {
-                        month: 'MAY',
-                        sale: monthlySales[4].sale = parseInt(monthlySales[4].sale) + parseInt(ordersList[i].amount)
-                    }
-                }
-
-                if (month === 6) {
-                    monthlySales[5] = {
-                        month: 'JUNE',
-                        sale: monthlySales[5].sale = parseInt(monthlySales[5].sale) + parseInt(ordersList[i].amount)
-                    }
-                }
-
-                if (month === 7) {
-                    monthlySales[6] = {
-                        month: 'JULY',
-                        sale: monthlySales[6].sale = parseInt(monthlySales[6].sale) + parseInt(ordersList[i].amount)
-                    }
-                }
-
-                if (month === 8) {
-                    monthlySales[7] = {
-                        month: 'AUG',
-                        sale: monthlySales[7].sale = parseInt(monthlySales[7].sale) + parseInt(ordersList[i].amount)
-                    }
-                }
-
-                if (month === 9) {
-                    monthlySales[8] = {
-                        month: 'SEP',
-                        sale: monthlySales[8].sale = parseInt(monthlySales[8].sale) + parseInt(ordersList[i].amount)
-                    }
-                }
-
-                if (month === 10) {
-                    monthlySales[9] = {
-                        month: 'OCT',
-                        sale: monthlySales[9].sale = parseInt(monthlySales[9].sale) + parseInt(ordersList[i].amount)
-                    }
-                }
-
-                if (month === 11) {
-                    monthlySales[10] = {
-                        month: 'NOV',
-                        sale: monthlySales[10].sale = parseInt(monthlySales[10].sale) + parseInt(ordersList[i].amount)
-                    }
-                }
-
-                if (month === 12) {
-                    monthlySales[11] = {
-                        month: 'DEC',
-                        sale: monthlySales[11].sale = parseInt(monthlySales[11].sale) + parseInt(ordersList[i].amount)
-                    }
-                }
-
-            }
-
-            //  console.log(monthDtr.substr(0,2));
-            // console.log(currentYear)
-
-        }
-
-
-
-        return res.status(200).json({
-            totalSales: totalSales,
-            monthlySales: monthlySales
-        })
-
-    } catch (error) {
-        console.log(error);
+      if (year === currentYear && monthIndex >= 0 && monthIndex < 12) {
+        monthlySales[monthIndex].sale =
+          parseInt(monthlySales[monthIndex].sale, 10) + amount;
+      }
     }
-})
 
+    return res.status(200).json({
+      totalSales,
+      monthlySales,
+      year: currentYear,
+    });
+  } catch (error) {
+    console.error("Sales error:", error);
+    return res
+      .status(500)
+      .json({ success: false, error: "Internal Server Error" });
+  }
+});
+
+// =====================================================
+// ================ ORDER LISTING ======================
+// =====================================================
+
+// GET all orders
+// - Admin: can see all orders, optional filters via query (allowlisted)
+// - Normal user: sees ONLY their own orders, ignoring filters
 router.get(`/`, async (req, res) => {
+  if (!requireAuth(req, res)) return;
 
-    try {
+  try {
+    let filter = {};
 
-
-        const ordersList = await Orders.find(req.query)
-
-
-        if (!ordersList) {
-            res.status(500).json({ success: false })
+    if (req.auth.isAdmin) {
+      filter = {};
+      for (const key of Object.keys(req.query || {})) {
+        if (ADMIN_FILTER_FIELDS.includes(key)) {
+          filter[key] = req.query[key];
         }
-
-        return res.status(200).json(ordersList);
-
-    } catch (error) {
-        res.status(500).json({ success: false })
-    }
-
-
-});
-
-
-router.get('/:id', async (req, res) => {
-
-    const order = await Orders.findById(req.params.id);
-
-    if (!order) {
-        res.status(500).json({ message: 'The order with the given ID was not found.' })
-    }
-    return res.status(200).send(order);
-})
-
-router.get(`/get/count`, async (req, res) => {
-    const orderCount = await Orders.countDocuments()
-
-    if (!orderCount) {
-        res.status(500).json({ success: false })
+      }
     } else {
-        res.send({
-            orderCount: orderCount
-        });
+      // Normal user: force filter to own orders only
+      filter = { userid: req.auth.id };
     }
 
-})
+    const ordersList = await Orders.find(filter).sort({ date: -1 });
 
-
-
-router.post('/create', async (req, res) => {
-
-    let order = new Orders({
-        name: req.body.name,
-        phoneNumber: req.body.phoneNumber,
-        address: req.body.address,
-        pincode: req.body.pincode,
-        amount: req.body.amount,
-        paymentId: req.body.paymentId,
-        paymentType:req.body.paymentType,
-        email: req.body.email,
-        userid: req.body.userid,
-        products: req.body.products,
-        date: req.body.date
-    });
-
-    let order1 = {
-        name: req.body.name,
-        phoneNumber: req.body.phoneNumber,
-        address: req.body.address,
-        pincode: req.body.pincode,
-        amount: req.body.amount,
-        paymentId: req.body.paymentId,
-        paymentType:req.body.paymentType,
-        email: req.body.email,
-        userid: req.body.userid,
-        products: req.body.products,
-        date: req.body.date
-    };
-
-    console.log(order1)
-
-
-
-    if (!order) {
-        res.status(500).json({
-            error: err,
-            success: false
-        })
-    }
-
-
-    order = await order.save();
-
-
-    res.status(201).json(order);
-
+    return res.status(200).json(ordersList);
+  } catch (error) {
+    console.error("Get orders error:", error);
+    return res
+      .status(500)
+      .json({ success: false, error: "Internal Server Error" });
+  }
 });
 
-router.post('/cod/create', async (req, res) => {
+// GET single order
+// - Admin: can see any order
+// - User: can only see if it belongs to them
+router.get("/:id", async (req, res) => {
+  if (!requireAuth(req, res)) return;
 
-    let order = new Orders({
-        name: req.body.name,
-        phoneNumber: req.body.phoneNumber,
-        address: req.body.address,
-        pincode: req.body.pincode,
-        amount: req.body.amount,
-        paymentId: req.body.paymentId,
-        paymentType:req.body.paymentType,
-        email: req.body.email,
-        userid: req.body.userid,
-        products: req.body.products,
-        date: req.body.date
-    });
-
-    // let order1 = {
-    //     name: req.body.name,
-    //     phoneNumber: req.body.phoneNumber,
-    //     address: req.body.address,
-    //     pincode: req.body.pincode,
-    //     amount: req.body.amount,
-    //     paymentId: req.body.paymentId,
-    //     email: req.body.email,
-    //     userid: req.body.userid,
-    //     products: req.body.products,
-    //     date: req.body.date
-    // };
-
-    // console.log(order1)
-
-
-
+  try {
+    const order = await Orders.findById(req.params.id);
     if (!order) {
-        res.status(500).json({
-            error: err,
-            success: false
-        })
+      return res
+        .status(404)
+        .json({ message: "The order with the given ID was not found." });
     }
 
+    if (!req.auth.isAdmin && String(order.userid) !== String(req.auth.id)) {
+      return res.status(403).json({ error: true, msg: "Forbidden" });
+    }
 
-    order = await order.save();
-
-
-    res.status(201).json(order);
-
+    return res.status(200).send(order);
+  } catch (e) {
+    console.error("Get single order error:", e);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
 });
 
+// COUNT orders (Admin only)
+router.get(`/get/count`, async (req, res) => {
+  if (!requireAdmin(req, res)) return;
 
-router.delete('/:id', async (req, res) => {
+  try {
+    const orderCount = await Orders.countDocuments();
 
+    return res.send({
+      orderCount,
+    });
+  } catch (error) {
+    console.error("Order count error:", error);
+    return res
+      .status(500)
+      .json({ success: false, error: "Internal Server Error" });
+  }
+});
+
+// =====================================================
+// ================ ORDER CREATE =======================
+// =====================================================
+
+// Create online-paid order
+router.post("/create", async (req, res) => {
+  if (!requireAuth(req, res)) return;
+
+  try {
+    const {
+      name,
+      phoneNumber,
+      address,
+      pincode,
+      amount,
+      paymentId,
+      paymentType,
+      email,
+      products,
+      date,
+    } = req.body;
+
+    if (
+      !name ||
+      !phoneNumber ||
+      !address ||
+      !pincode ||
+      !amount ||
+      !Array.isArray(products) ||
+      products.length === 0
+    ) {
+      return res
+        .status(400)
+        .json({ success: false, msg: "Missing required order fields" });
+    }
+
+    const order = new Orders({
+      name,
+      phoneNumber,
+      address,
+      pincode,
+      amount,
+      paymentId,
+      paymentType,
+      email,
+      userid: req.auth.id, // 👈 always from token, not body
+      products,
+      date: date || new Date(),
+    });
+
+    const saved = await order.save();
+
+    if (NODE_ENV !== "production") {
+      console.log("New order created:", {
+        id: saved._id,
+        userid: saved.userid,
+        amount: saved.amount,
+      });
+    }
+
+    return res.status(201).json(saved);
+  } catch (error) {
+    console.error("Create order error:", error);
+    return res
+      .status(500)
+      .json({ success: false, msg: "Order creation failed" });
+  }
+});
+
+// Create Cash-On-Delivery order
+router.post("/cod/create", async (req, res) => {
+  if (!requireAuth(req, res)) return;
+
+  try {
+    const {
+      name,
+      phoneNumber,
+      address,
+      pincode,
+      amount,
+      paymentType,
+      email,
+      products,
+      date,
+    } = req.body;
+
+    if (
+      !name ||
+      !phoneNumber ||
+      !address ||
+      !pincode ||
+      !amount ||
+      !Array.isArray(products) ||
+      products.length === 0
+    ) {
+      return res
+        .status(400)
+        .json({ success: false, msg: "Missing required order fields" });
+    }
+
+    const order = new Orders({
+      name,
+      phoneNumber,
+      address,
+      pincode,
+      amount,
+      paymentId: null,
+      paymentType: paymentType || "COD",
+      email,
+      userid: req.auth.id, // 👈 always from token
+      products,
+      date: date || new Date(),
+    });
+
+    const saved = await order.save();
+
+    if (NODE_ENV !== "production") {
+      console.log("New COD order created:", {
+        id: saved._id,
+        userid: saved.userid,
+        amount: saved.amount,
+      });
+    }
+
+    return res.status(201).json(saved);
+  } catch (error) {
+    console.error("Create COD order error:", error);
+    return res
+      .status(500)
+      .json({ success: false, msg: "COD order creation failed" });
+  }
+});
+
+// =====================================================
+// ================ ORDER UPDATE / DELETE (ADMIN) ======
+// =====================================================
+
+// Admin: delete order
+router.delete("/:id", async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+
+  try {
     const deletedOrder = await Orders.findByIdAndDelete(req.params.id);
 
     if (!deletedOrder) {
-        res.status(404).json({
-            message: 'Order not found!',
-            success: false
-        })
+      return res.status(404).json({
+        message: "Order not found!",
+        success: false,
+      });
     }
 
-    res.status(200).json({
-        success: true,
-        message: 'Order Deleted!'
-    })
+    return res.status(200).json({
+      success: true,
+      message: "Order Deleted!",
+    });
+  } catch (error) {
+    console.error("Delete order error:", error);
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal Server Error" });
+  }
 });
 
+// Admin: update order (usually status)
+router.put("/:id", async (req, res) => {
+  if (!requireAdmin(req, res)) return;
 
-router.put('/:id', async (req, res) => {
+  try {
+    // Allow only limited fields to change (status, paymentId, paymentType)
+    const update = {
+      status: req.body.status,
+    };
 
-    const order = await Orders.findByIdAndUpdate(
-        req.params.id,
-        {
-            name: req.body.name,
-            phoneNumber: req.body.phoneNumber,
-            address: req.body.address,
-            pincode: req.body.pincode,
-            amount: req.body.amount,
-            paymentId: req.body.paymentId,
-            email: req.body.email,
-            userid: req.body.userid,
-            products: req.body.products,
-            status: req.body.status
-        },
-        { new: true }
-    )
+    if (req.body.paymentId !== undefined) {
+      update.paymentId = req.body.paymentId;
+    }
+    if (req.body.paymentType !== undefined) {
+      update.paymentType = req.body.paymentType;
+    }
 
-
+    const order = await Orders.findByIdAndUpdate(req.params.id, update, {
+      new: true,
+    });
 
     if (!order) {
-        return res.status(500).json({
-            message: 'Order cannot be updated!',
-            success: false
-        })
+      return res.status(404).json({
+        message: "Order cannot be updated – not found",
+        success: false,
+      });
     }
 
-    res.send(order);
+    return res.send(order);
+  } catch (error) {
+    console.error("Update order error:", error);
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal Server Error" });
+  }
+});
 
-})
+// =====================================================
+// ================ RAZORPAY INTEGRATION ===============
+// =====================================================
 
-// ✅ Step 1: Create Razorpay Order
-router.post("/create-razorpay-order", async (req, res) => {
+// Step 1: Create Razorpay Order
+router.post(
+  "/create-razorpay-order",
+  razorpayLimiter,
+  async (req, res) => {
+    if (!requireAuth(req, res)) return;
+
+    if (!HAS_RAZORPAY_CONFIG) {
+      return res.status(500).json({
+        success: false,
+        error: "Razorpay is not configured on server",
+      });
+    }
+
     try {
       const { amount, currency } = req.body;
-  
+
+      const amt = Number(amount);
+      if (!amt || Number.isNaN(amt) || amt <= 0) {
+        return res
+          .status(400)
+          .json({ success: false, error: "Invalid amount" });
+      }
+
       const options = {
-        amount: amount * 100, // paise
+        amount: Math.round(amt * 100), // paise
         currency: currency || "INR",
         receipt: "receipt_" + Date.now(),
+        notes: {
+          userId: req.auth.id,
+        },
       };
-  
+
       const order = await razorpay.orders.create(options);
-      res.json(order);
+      return res.json(order);
     } catch (error) {
       console.error("Error creating Razorpay order:", error);
-      res.status(500).json({ success: false });
+      return res.status(500).json({ success: false });
     }
-  });
-  
-  // ✅ Step 2: Verify Payment Signature
-  router.post("/verify-payment", (req, res) => {
+  }
+);
+
+// Step 2: Verify Payment Signature
+router.post(
+  "/verify-payment",
+  razorpayLimiter,
+  async (req, res) => {
+    if (!requireAuth(req, res)) return;
+
+    if (!HAS_RAZORPAY_CONFIG) {
+      return res.status(500).json({
+        success: false,
+        error: "Razorpay is not configured on server",
+      });
+    }
+
     try {
-      const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
-  
-      // ✅ If running in development/test mode → skip verification
-      if (process.env.NODE_ENV !== "production") {
-        console.log("⚠️ Skipping Razorpay signature verification in Test Mode");
+      const { razorpay_order_id, razorpay_payment_id, razorpay_signature } =
+        req.body;
+
+      if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+        return res
+          .status(400)
+          .json({ success: false, error: "Missing Razorpay params" });
+      }
+
+      // If running in development/test mode → skip verification
+      if (NODE_ENV !== "production") {
+        console.log(
+          "⚠️ Skipping Razorpay signature verification in Test Mode"
+        );
         return res.json({ success: true, testMode: true });
       }
-  
-      // ✅ Production: verify signature properly
+
+      // Production: verify signature properly
       const sign = razorpay_order_id + "|" + razorpay_payment_id;
       const expectedSign = crypto
-        .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+        .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET || "")
         .update(sign.toString())
         .digest("hex");
-  
+
       if (razorpay_signature === expectedSign) {
-        res.json({ success: true });
+        return res.json({ success: true });
       } else {
-        res.status(400).json({ success: false, error: "Invalid signature" });
+        return res
+          .status(400)
+          .json({ success: false, error: "Invalid signature" });
       }
     } catch (err) {
       console.error("❌ Verification error:", err);
-      res.status(500).json({ success: false, error: "Server error" });
+      return res
+        .status(500)
+        .json({ success: false, error: "Server error" });
     }
-  });
-  
-
-
+  }
+);
 
 module.exports = router;
-

@@ -5,7 +5,7 @@ import "./responsive.css";
 import Dashboard from "./pages/Dashboard";
 import Header from "./components/Header";
 import Sidebar from "./components/Sidebar";
-import React, { createContext, useEffect, useState, useRef } from "react";
+import React, { createContext, useEffect, useState } from "react";
 import Login from "./pages/Login";
 import SignUp from "./pages/SignUp";
 import Products from "./pages/Products";
@@ -58,11 +58,12 @@ function App() {
   );
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const [catData, setCatData] = useState([]);
-  const [subCatData, setSubCatData] = useState([]);  
+  const [subCatData, setSubCatData] = useState([]);
   const [user, setUser] = useState({
     name: "",
     email: "",
     userId: "",
+    isAdmin: false,
   });
 
   const [isOpenNav, setIsOpenNav] = useState(false);
@@ -80,6 +81,7 @@ function App() {
   const [countryList, setCountryList] = useState([]);
   const [selectedCountry, setselectedCountry] = useState("");
 
+  // ---------- Theme ----------
   useEffect(() => {
     if (theme === "dark") {
       document.body.classList.add("dark");
@@ -92,70 +94,68 @@ function App() {
     }
   }, [theme]);
 
-
-//   useEffect(() => {
-//     const handleContextmenu = e => {
-//         e.preventDefault()
-//     }
-//     document.addEventListener('contextmenu', handleContextmenu)
-//     return function cleanup() {
-//         document.removeEventListener('contextmenu', handleContextmenu)
-//     }
-// }, [ ])
-
+  // ---------- Admin session init (IMPORTANT) ----------
   useEffect(() => {
     const token = localStorage.getItem("token");
+    const rawUser = localStorage.getItem("user");
 
-    if (token !== "" && token !== undefined && token !== null) {
-      setIsLogin(true);
-
-      const userData = JSON.parse(localStorage.getItem("user"));
-      setUser(userData);
-    } else {
+    if (!token || !rawUser) {
       setIsLogin(false);
+      setUser({ name: "", email: "", userId: "", isAdmin: false });
+      return;
     }
-  }, [isLogin, localStorage.getItem("user")]);
 
+    try {
+      const parsed = JSON.parse(rawUser);
+
+      // 🔒 Only allow admins in admin panel
+      if (parsed?.isAdmin !== true) {
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        setIsLogin(false);
+        setUser({ name: "", email: "", userId: "", isAdmin: false });
+        return;
+      }
+
+      setIsLogin(true);
+      setUser(parsed);
+    } catch (err) {
+      console.error("Failed to parse user from localStorage:", err);
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      setIsLogin(false);
+      setUser({ name: "", email: "", userId: "", isAdmin: false });
+    }
+  }, []);
+
+  // ---------- Country list ----------
   useEffect(() => {
     getCountry("https://countriesnow.space/api/v0.1/countries/");
   }, []);
 
   const countryListArr = [];
-  
+
   const getCountry = async (url) => {
-    const responsive = await axios.get(url).then((res) => {
-      
+    await axios.get(url).then((res) => {
       if (res !== null) {
-        //console.log(res.data.data);
-        res.data.data.map((item, index) => {
+        res.data.data.forEach((item) => {
           countryListArr.push({
-            value:item?.iso2,
-            label:item?.country,
+            value: item?.iso2,
+            label: item?.country,
           });
-          //console.log(item.country)
         });
 
-
-       
         setCountryList(countryListArr);
-
-        //console.log(res.data.data[0].country)
       }
-
     });
   };
-
 
   const handleClose = (event, reason) => {
-    if (reason === "clickaway") {
-      return;
-    }
-
-    setAlertBox({
-      open: false,
-    });
+    if (reason === "clickaway") return;
+    setAlertBox((prev) => ({ ...prev, open: false }));
   };
 
+  // ---------- Categories ----------
   useEffect(() => {
     setProgress(20);
     fetchCategory();
@@ -163,14 +163,25 @@ function App() {
 
   const fetchCategory = () => {
     fetchDataFromApi("/api/category").then((res) => {
-      setCatData(res);
+      // if API failed, res may be { success:false, msg:... }
+      if (Array.isArray(res)) {
+        setCatData(res);
+      } else {
+        setCatData([]);
+        console.error("Failed to load categories", res);
+      }
       setProgress(100);
     });
   };
 
   const fetchSubCategory = () => {
     fetchDataFromApi("/api/subCat").then((res) => {
-      setSubCatData(res.subCategoryList);  // backend sends { subCategoryList: [...] }
+      // backend sends { subCategoryList: [...] }
+      if (res && Array.isArray(res.subCategoryList)) {
+        setSubCatData(res.subCategoryList);
+      } else {
+        setSubCatData([]);
+      }
     });
   };
 
@@ -193,8 +204,8 @@ function App() {
     baseUrl,
     catData,
     fetchCategory,
-    subCatData,         
-    fetchSubCategory, 
+    subCatData,
+    fetchSubCategory,
     setUser,
     user,
     countryList,
@@ -202,7 +213,7 @@ function App() {
     setselectedCountry,
     windowWidth,
     openNav,
-    setIsOpenNav
+    setIsOpenNav,
   };
 
   return (
@@ -252,9 +263,9 @@ function App() {
           )}
 
           <div
-            className={`content ${isHideSidebarAndHeader === true && "full"} ${
-              isToggleSidebar === true ? "toggle" : ""
-            }`}
+            className={`content ${
+              isHideSidebarAndHeader === true && "full"
+            } ${isToggleSidebar === true ? "toggle" : ""}`}
           >
             <Routes>
               <Route path="/" exact={true} element={<Dashboard />} />
@@ -343,24 +354,48 @@ function App() {
                 element={<EditBanner />}
               />
 
-              <Route path="/homeSideBanners" exact={true} element={<HomeSideBannersList />} />
-              <Route path="/homeSideBanners/add" exact={true} element={<AddHomeSideBanner />} />
+              <Route
+                path="/homeSideBanners"
+                exact={true}
+                element={<HomeSideBannersList />}
+              />
+              <Route
+                path="/homeSideBanners/add"
+                exact={true}
+                element={<AddHomeSideBanner />}
+              />
               <Route
                 path="/homeSideBanners/edit/:id"
                 exact={true}
                 element={<EditHomeSideBanner />}
               />
 
-              <Route path="/homeBottomBanners" exact={true} element={<HomeBottomBannersList />} />
-              <Route path="/homeBottomBanners/add" exact={true} element={<AddHomeBottomBanner />} />
+              <Route
+                path="/homeBottomBanners"
+                exact={true}
+                element={<HomeBottomBannersList />}
+              />
+              <Route
+                path="/homeBottomBanners/add"
+                exact={true}
+                element={<AddHomeBottomBanner />}
+              />
               <Route
                 path="/homeBottomBanners/edit/:id"
                 exact={true}
                 element={<EditHomeBottomBanner />}
               />
               <Route exact={true} path="/my-account" element={<MyAccount />} />
-              <Route exact={true} path="/verify-account" element={<VerifyAccount />} />
-              <Route exact={true} path="/forgot-password" element={<ForgotPassword />} />
+              <Route
+                exact={true}
+                path="/verify-account"
+                element={<VerifyAccount />}
+              />
+              <Route
+                exact={true}
+                path="/forgot-password"
+                element={<ForgotPassword />}
+              />
             </Routes>
           </div>
         </div>

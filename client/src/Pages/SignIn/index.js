@@ -7,7 +7,7 @@ import { Link, useNavigate } from "react-router-dom";
 
 import GoogleImg from "../../assets/images/googleImg.png";
 import CircularProgress from "@mui/material/CircularProgress";
-import { editData, postData } from "../../utils/api";
+import { postData } from "../../utils/api";
 
 import { getAuth, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
 import { firebaseApp } from "../../firebase";
@@ -21,118 +21,149 @@ const SignIn = () => {
   const context = useContext(MyContext);
   const history = useNavigate();
 
-  useEffect(() => {
-    context.setisHeaderFooterShow(false);
-    context.setEnableFilterTab(false);
-  }, []);
-
   const [formfields, setFormfields] = useState({
     email: "",
     password: "",
   });
 
+  useEffect(() => {
+    context.setisHeaderFooterShow(false);
+    context.setEnableFilterTab(false);
+  }, []);
+
   const onchangeInput = (e) => {
-    setFormfields(() => ({
-      ...formfields,
+    setFormfields((prev) => ({
+      ...prev,
       [e.target.name]: e.target.value,
     }));
   };
 
-  const login = (e) => {
+  // ---------------- LOGIN FLOW ----------------
+  const login = async (e) => {
     e.preventDefault();
 
-    if (formfields.email === "") {
+    if (!formfields.email) {
       context.setAlertBox({
         open: true,
         error: true,
         msg: "Email cannot be blank!",
       });
-      return false;
+      return;
     }
 
-    if (isOpenVerifyEmailBox === false) {
-      if (formfields.password === "") {
+    // ------------ STEP 1: Normal Sign In ------------
+    if (!isOpenVerifyEmailBox) {
+      if (!formfields.password) {
         context.setAlertBox({
           open: true,
           error: true,
           msg: "Password cannot be blank!",
         });
-        return false;
+        return;
       }
 
-      setIsLoading(true);
-      postData("/api/user/signin", formfields).then((res) => {
-        try {
-          if (res.error !== true) {
-            localStorage.setItem("token", res.token);
+      try {
+        setIsLoading(true);
+        const res = await postData("/api/user/signin", formfields);
 
-            const user = {
-              name: res.user?.name,
-              email: res.user?.email,
-              userId: res.user?.id,
-              image: res?.user?.images[0],
-            };
+        if (res.error !== true) {
+          // ✅ Login success
+          localStorage.setItem("token", res.token);
 
-            localStorage.setItem("user", JSON.stringify(user));
-            context.setUser(JSON.stringify(user));
+          const user = {
+            name: res.user?.name,
+            email: res.user?.email,
+            userId: res.user?.id,
+            image: res?.user?.images?.[0],
+          };
 
-            context.setAlertBox({
-              open: true,
-              error: false,
-              msg: res.msg,
-            });
+          localStorage.setItem("user", JSON.stringify(user));
+          context.setUser(JSON.stringify(user));
 
-            setTimeout(() => {
-              history("/");
-              context.setIsLogin(true);
-              setIsLoading(false);
-              context.setisHeaderFooterShow(true);
-            }, 2000);
-          } else {
-            if (res?.isVerify === false) {
-              setIsLoading(true);
-              setIsOpenVerifyEmailBox(true);
-            }
+          context.setAlertBox({
+            open: true,
+            error: false,
+            msg: res.msg,
+          });
 
-            context.setAlertBox({
-              open: true,
-              error: true,
-              msg: res.msg,
-            });
+          setTimeout(() => {
+            history("/");
+            context.setIsLogin(true);
             setIsLoading(false);
+            context.setisHeaderFooterShow(true);
+          }, 1500);
+        } else {
+          // ❌ Login failed
+          if (res?.isVerify === false) {
+            // Account exists but not verified
+            setIsOpenVerifyEmailBox(true);
+            localStorage.setItem("userEmail", formfields.email);
           }
-        } catch (error) {
-          console.log(error);
+
+          context.setAlertBox({
+            open: true,
+            error: true,
+            msg: res.msg,
+          });
           setIsLoading(false);
         }
-      });
+      } catch (error) {
+        console.error(error);
+        context.setAlertBox({
+          open: true,
+          error: true,
+          msg: error.message || "Login failed",
+        });
+        setIsLoading(false);
+      }
+
+      return;
     }
 
-    if (isOpenVerifyEmailBox === true) {
-      localStorage.setItem("userEmail", formfields.email);
-      postData("/api/user/verifyAccount/resendOtp", {
-        email: formfields.email,
-      }).then((res) => {
-        if (res?.otp !== null && res?.otp !== "") {
-          editData(`/api/user/verifyAccount/emailVerify/${res.existingUserId}`, {
-            email: formfields.email,
-            otp: res?.otp,
-          }).then(() => {
-            setTimeout(() => {
-              setIsLoading(true);
-              history("/verifyOTP");
-            }, 2000);
+    // ------------ STEP 2: Send verification OTP ------------
+    if (isOpenVerifyEmailBox) {
+      try {
+        setIsLoading(true);
+        const email = formfields.email;
+
+        const res = await postData("/api/user/verifyAccount/resendOtp", {
+          email,
+        });
+
+        if (res?.success) {
+          context.setAlertBox({
+            open: true,
+            error: false,
+            msg: res?.message || "Verification OTP sent to your email",
+          });
+
+          // Go to OTP page for verification
+          localStorage.setItem("userEmail", email);
+          history("/verifyOTP");
+        } else {
+          context.setAlertBox({
+            open: true,
+            error: true,
+            msg: res?.message || res?.msg || "Failed to send OTP",
           });
         }
-      });
+      } catch (err) {
+        console.error("verifyAccount/resendOtp error:", err);
+        context.setAlertBox({
+          open: true,
+          error: true,
+          msg: err.message || "Failed to send OTP",
+        });
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
+  // ---------------- GOOGLE SIGN IN ----------------
   const signInWithGoogle = () => {
     signInWithPopup(auth, googleProvider)
       .then((result) => {
-        const credential = GoogleAuthProvider.credentialFromResult(result);
-        const token = credential.accessToken;
         const user = result.user;
 
         const fields = {
@@ -148,13 +179,13 @@ const SignIn = () => {
             if (res.error !== true) {
               localStorage.setItem("token", res.token);
 
-              const user = {
+              const userObj = {
                 name: res.user?.name,
                 email: res.user?.email,
                 userId: res.user?.id,
               };
 
-              localStorage.setItem("user", JSON.stringify(user));
+              localStorage.setItem("user", JSON.stringify(userObj));
 
               context.setAlertBox({
                 open: true,
@@ -167,7 +198,7 @@ const SignIn = () => {
                 context.setIsLogin(true);
                 setIsLoading(false);
                 context.setisHeaderFooterShow(true);
-              }, 2000);
+              }, 1500);
             } else {
               context.setAlertBox({
                 open: true,
@@ -203,14 +234,12 @@ const SignIn = () => {
       <div className="shape-bottom">
         <svg
           fill="#fff"
-          id="Layer_1"
           x="0px"
           y="0px"
           viewBox="0 0 1921 819.8"
           style={{ enableBackground: "new 0 0 1921 819.8" }}
         >
           <path
-            className="st0"
             d="M1921,413.1v406.7H0V0.5h0.4l228.1,598.3c30,74.4,80.8,130.6,152.5,168.6c107.6,57,212.1,40.7,245.7,34.4 c22.4-4.2,54.9-13.1,97.5-26.6L1921,400.5V413.1z"
           ></path>
         </svg>
@@ -253,9 +282,11 @@ const SignIn = () => {
                   />
                 </div>
 
-                {/* ✅ Updated: Link to Forgot Password page */}
                 <div className="text-right mb-3">
-                  <Link to="/forgotPassword" className="border-effect cursor txt">
+                  <Link
+                    to="/forgotPassword"
+                    className="border-effect cursor txt"
+                  >
                     Forgot Password?
                   </Link>
                 </div>
@@ -296,7 +327,7 @@ const SignIn = () => {
               </>
             ) : (
               <Button type="submit" className="btn-blue col btn-lg btn-big">
-                {isLoading ? <CircularProgress /> : "Verify Email"}
+                {isLoading ? <CircularProgress /> : "Send Verification OTP"}
               </Button>
             )}
           </form>

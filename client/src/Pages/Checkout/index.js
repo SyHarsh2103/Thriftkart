@@ -7,8 +7,8 @@ import { MyContext } from "../../App";
 import { fetchDataFromApi, postData, deleteData } from "../../utils/api";
 
 const Checkout = () => {
-  const context = useContext(MyContext);   // ✅ Context
-  const navigate = useNavigate();          // ✅ useNavigate hook
+  const context = useContext(MyContext);
+  const navigate = useNavigate();
 
   const [formFields, setFormFields] = useState({
     fullName: "",
@@ -27,24 +27,53 @@ const Checkout = () => {
   const [taxAmount, setTaxAmount] = useState(0);
   const [totalAmount, setTotalAmount] = useState(0);
 
+  const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+
   const TAX_PERCENTAGE = 0.18; // 18% GST
 
-  // ✅ Fetch cart on mount
+  // ✅ On mount: require login + load cart
   useEffect(() => {
     window.scrollTo(0, 0);
     context.setEnableFilterTab(false);
 
+    const token = localStorage.getItem("token");
+    if (!token) {
+      context.setAlertBox({
+        open: true,
+        error: true,
+        msg: "Please sign in to place an order",
+      });
+      navigate("/signIn");
+      return;
+    }
+
     const user = JSON.parse(localStorage.getItem("user"));
-    fetchDataFromApi(`/api/cart?userId=${user?.userId}`).then((res) => {
-      setCartData(res || []);
-    });
-  }, [context]);
+    if (!user?.userId) {
+      context.setAlertBox({
+        open: true,
+        error: true,
+        msg: "User session invalid. Please sign in again.",
+      });
+      navigate("/signIn");
+      return;
+    }
+
+    fetchDataFromApi(`/api/cart?userId=${user.userId}`)
+      .then((res) => setCartData(res || []))
+      .catch(() => {
+        context.setAlertBox({
+          open: true,
+          error: true,
+          msg: "Failed to load cart",
+        });
+      });
+  }, [context, navigate]);
 
   // ✅ Recalculate totals whenever cartData changes
   useEffect(() => {
     if (cartData.length !== 0) {
       const sub = cartData
-        .map((item) => parseInt(item.price) * item.quantity)
+        .map((item) => parseInt(item.price, 10) * item.quantity)
         .reduce((total, value) => total + value, 0);
 
       const tax = sub * TAX_PERCENTAGE;
@@ -67,11 +96,7 @@ const Checkout = () => {
     }));
   };
 
-  // ---------------- Razorpay Checkout ----------------
-  const checkout = async (e) => {
-    e.preventDefault();
-
-    // Validation
+  const validateAddress = () => {
     for (const [key, value] of Object.entries(formFields)) {
       if (!value && key !== "streetAddressLine2") {
         context.setAlertBox({
@@ -79,152 +104,214 @@ const Checkout = () => {
           error: true,
           msg: `Please fill ${key}`,
         });
-        return;
+        return false;
       }
     }
+    if (!cartData.length) {
+      context.setAlertBox({
+        open: true,
+        error: true,
+        msg: "Your cart is empty",
+      });
+      return false;
+    }
+    return true;
+  };
 
-    const addressInfo = {
-      name: formFields.fullName,
-      phoneNumber: formFields.phoneNumber,
-      address: formFields.streetAddressLine1 + " " + formFields.streetAddressLine2,
-      pincode: formFields.zipCode,
-      date: new Date().toLocaleString("en-US", {
-        month: "short",
-        day: "2-digit",
-        year: "numeric",
-      }),
-    };
+  const buildAddressInfo = () => ({
+    name: formFields.fullName,
+    phoneNumber: formFields.phoneNumber,
+    address:
+      formFields.streetAddressLine1 + " " + (formFields.streetAddressLine2 || ""),
+    pincode: formFields.zipCode,
+    date: new Date().toLocaleString("en-US", {
+      month: "short",
+      day: "2-digit",
+      year: "numeric",
+    }),
+  });
 
-    // Step 1: Ask backend to create Razorpay order
-    const orderData = await postData("/api/orders/create-razorpay-order", {
-      amount: totalAmount,
-      currency: "INR",
-    });
+  const clearCartAndGoToOrders = async () => {
+    const user = JSON.parse(localStorage.getItem("user"));
+    if (!user?.userId) return;
 
-    if (!orderData || !orderData.id) {
-      alert("Failed to create Razorpay order. Please try again.");
+    try {
+      const res = await fetchDataFromApi(`/api/cart?userId=${user.userId}`);
+      if (Array.isArray(res) && res.length) {
+        await Promise.all(
+          res.map((item) => deleteData(`/api/cart/${item?.id}`))
+        );
+      }
+      setTimeout(() => {
+        context.getCartData?.();
+      }, 500);
+      navigate("/orders");
+    } catch (err) {
+      console.error("Error clearing cart:", err);
+      navigate("/orders");
+    }
+  };
+
+  // ---------------- Razorpay Checkout ----------------
+  const checkout = async (e) => {
+    e.preventDefault();
+    if (!validateAddress()) return;
+
+    if (!window.Razorpay) {
+      context.setAlertBox({
+        open: true,
+        error: true,
+        msg: "Payment system not loaded. Please refresh and try again.",
+      });
       return;
     }
 
-    // Step 2: Razorpay Checkout options
-    const options = {
-      key: process.env.REACT_APP_RAZORPAY_KEY_ID,
-      order_id: orderData.id,
-      amount: orderData.amount,
-      currency: orderData.currency,
-      name: "Thriftkart",
-      description: "Secure payment for your Thriftkart order",
-      image: "/logo.png",
-      prefill: {
-        name: formFields.fullName,
-        email: formFields.email,
-        contact: formFields.phoneNumber,
-      },
-      handler: async function (response) {
-        // Step 3: Verify signature
-        const verifyRes = await postData("/api/orders/verify-payment", response);
+    setIsPlacingOrder(true);
 
-        if (verifyRes.success) {
-          // Step 4: Save order in DB
-          const user = JSON.parse(localStorage.getItem("user"));
-          const payLoad = {
-            name: addressInfo.name,
-            phoneNumber: formFields.phoneNumber,
-            address: addressInfo.address,
-            pincode: addressInfo.pincode,
-            amount: parseInt(totalAmount),
-            subtotal: parseInt(subtotal),
-            tax: parseInt(taxAmount),
-            paymentId: response.razorpay_payment_id,
-            paymentType: "Online",
-            email: user.email,
-            userid: user.userId,
-            products: cartData,
-            date: addressInfo.date,
-          };
+    try {
+      const addressInfo = buildAddressInfo();
 
-          await postData("/api/orders/create", payLoad);
+      // Step 1: Ask backend to create Razorpay order
+      const orderData = await postData("/api/orders/create-razorpay-order", {
+        amount: totalAmount,
+        currency: "INR",
+      });
 
-          // Clear cart
-          fetchDataFromApi(`/api/cart?userId=${user?.userId}`).then((res) => {
-            res?.length !== 0 &&
-              res?.map((item) => {
-                deleteData(`/api/cart/${item?.id}`);
+      if (!orderData || !orderData.id) {
+        context.setAlertBox({
+          open: true,
+          error: true,
+          msg: "Failed to create payment order. Please try again.",
+        });
+        setIsPlacingOrder(false);
+        return;
+      }
+
+      const options = {
+        key: process.env.REACT_APP_RAZORPAY_KEY_ID,
+        order_id: orderData.id,
+        amount: orderData.amount,
+        currency: orderData.currency,
+        name: "Thriftkart",
+        description: "Secure payment for your Thriftkart order",
+        image: "/logo.png",
+        prefill: {
+          name: formFields.fullName,
+          email: formFields.email,
+          contact: formFields.phoneNumber,
+        },
+        handler: async (response) => {
+          try {
+            // Step 2: Verify signature
+            const verifyRes = await postData("/api/orders/verify-payment", response);
+
+            if (!verifyRes?.success) {
+              context.setAlertBox({
+                open: true,
+                error: true,
+                msg: "Payment verification failed",
               });
-            setTimeout(() => {
-              context.getCartData();
-            }, 1000);
-            navigate("/orders");
-          });
-        } else {
-          alert("Payment verification failed ❌");
-        }
-      },
-      theme: { color: "#3399cc" },
-    };
+              setIsPlacingOrder(false);
+              return;
+            }
 
-    const rzp = new window.Razorpay(options);
-    rzp.open();
+            // Step 3: Save order in DB (backend will set userid from token)
+            const payLoad = {
+              name: addressInfo.name,
+              phoneNumber: formFields.phoneNumber,
+              address: addressInfo.address,
+              pincode: addressInfo.pincode,
+              amount: parseInt(totalAmount, 10),
+              subtotal: parseInt(subtotal, 10),
+              tax: parseInt(taxAmount, 10),
+              paymentId: response.razorpay_payment_id,
+              paymentType: "Online",
+              email: formFields.email,
+              products: cartData,
+              date: addressInfo.date,
+            };
+
+            await postData("/api/orders/create", payLoad);
+
+            context.setAlertBox({
+              open: true,
+              error: false,
+              msg: "Order placed successfully!",
+            });
+
+            await clearCartAndGoToOrders();
+          } catch (err) {
+            console.error("Order creation after payment error:", err);
+            context.setAlertBox({
+              open: true,
+              error: true,
+              msg: "Order creation failed after payment",
+            });
+          } finally {
+            setIsPlacingOrder(false);
+          }
+        },
+        theme: { color: "#3399cc" },
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.open();
+    } catch (error) {
+      console.error("Checkout error:", error);
+      context.setAlertBox({
+        open: true,
+        error: true,
+        msg: error.message || "Payment failed. Please try again.",
+      });
+      setIsPlacingOrder(false);
+    }
   };
 
   // ---------------- Cash On Delivery ----------------
   const cashOnDelivery = async (e) => {
     e.preventDefault();
+    if (!validateAddress()) return;
 
-    // Validation
-    for (const [key, value] of Object.entries(formFields)) {
-      if (!value && key !== "streetAddressLine2") {
-        context.setAlertBox({
-          open: true,
-          error: true,
-          msg: `Please fill ${key}`,
-        });
-        return;
-      }
+    setIsPlacingOrder(true);
+
+    try {
+      const addressInfo = buildAddressInfo();
+
+      const payLoad = {
+        name: addressInfo.name,
+        phoneNumber: formFields.phoneNumber,
+        address: addressInfo.address,
+        pincode: addressInfo.pincode,
+        amount: parseInt(totalAmount, 10),
+        subtotal: parseInt(subtotal, 10),
+        tax: parseInt(taxAmount, 10),
+        paymentId: null,
+        paymentType: "COD",
+        email: formFields.email,
+        products: cartData,
+        date: addressInfo.date,
+      };
+
+      // 🔐 Use dedicated COD route (backend sets userid from token)
+      await postData("/api/orders/cod/create", payLoad);
+
+      context.setAlertBox({
+        open: true,
+        error: false,
+        msg: "Order placed with Cash on Delivery!",
+      });
+
+      await clearCartAndGoToOrders();
+    } catch (error) {
+      console.error("COD error:", error);
+      context.setAlertBox({
+        open: true,
+        error: true,
+        msg: error.message || "COD order failed. Please try again.",
+      });
+    } finally {
+      setIsPlacingOrder(false);
     }
-
-    const addressInfo = {
-      name: formFields.fullName,
-      phoneNumber: formFields.phoneNumber,
-      address: formFields.streetAddressLine1 + " " + formFields.streetAddressLine2,
-      pincode: formFields.zipCode,
-      date: new Date().toLocaleString("en-US", {
-        month: "short",
-        day: "2-digit",
-        year: "numeric",
-      }),
-    };
-
-    const user = JSON.parse(localStorage.getItem("user"));
-    const payLoad = {
-      name: addressInfo.name,
-      phoneNumber: formFields.phoneNumber,
-      address: addressInfo.address,
-      pincode: addressInfo.pincode,
-      amount: parseInt(totalAmount),
-      subtotal: parseInt(subtotal),
-      tax: parseInt(taxAmount),
-      paymentId: "None",
-      paymentType: "COD",
-      email: user.email,
-      userid: user.userId,
-      products: cartData,
-      date: addressInfo.date,
-    };
-
-    await postData("/api/orders/create", payLoad);
-
-    // Clear cart
-    fetchDataFromApi(`/api/cart?userId=${user?.userId}`).then((res) => {
-      res?.length !== 0 &&
-        res?.map((item) => {
-          deleteData(`/api/cart/${item?.id}`);
-        });
-      setTimeout(() => {
-        context.getCartData();
-      }, 1000);
-      navigate("/orders");
-    });
   };
 
   return (
@@ -347,20 +434,25 @@ const Checkout = () => {
                         cartData?.map((item, index) => (
                           <tr key={index}>
                             <td>
-                              {item?.productTitle?.substr(0, 20) + "..."}{" "}
+                              {(item?.productTitle || "").substr(0, 20) + "..."}{" "}
                               <b>× {item?.quantity}</b>
                             </td>
                             <td>
-                              {(parseInt(item.price) * item.quantity)?.toLocaleString("en-US", {
-                                style: "currency",
-                                currency: "INR",
-                              })}
+                              {(parseInt(item.price, 10) * item.quantity)?.toLocaleString(
+                                "en-US",
+                                {
+                                  style: "currency",
+                                  currency: "INR",
+                                }
+                              )}
                             </td>
                           </tr>
                         ))}
 
                       <tr>
-                        <td><b>Subtotal</b></td>
+                        <td>
+                          <b>Subtotal</b>
+                        </td>
                         <td>
                           {subtotal?.toLocaleString("en-US", {
                             style: "currency",
@@ -370,7 +462,9 @@ const Checkout = () => {
                       </tr>
 
                       <tr>
-                        <td><b>Tax (18%)</b></td>
+                        <td>
+                          <b>Tax (18%)</b>
+                        </td>
                         <td>
                           {taxAmount?.toLocaleString("en-US", {
                             style: "currency",
@@ -380,7 +474,9 @@ const Checkout = () => {
                       </tr>
 
                       <tr>
-                        <td><b>Total</b></td>
+                        <td>
+                          <b>Total</b>
+                        </td>
                         <td>
                           {totalAmount?.toLocaleString("en-US", {
                             style: "currency",
@@ -394,15 +490,19 @@ const Checkout = () => {
 
                 <Button
                   onClick={checkout}
+                  disabled={isPlacingOrder || !cartData.length}
                   className="btn-blue bg-red btn-lg btn-big"
                 >
-                  <IoBagCheckOutline /> &nbsp; Pay Online
+                  <IoBagCheckOutline /> &nbsp;
+                  {isPlacingOrder ? "Processing..." : "Pay Online"}
                 </Button>
                 <Button
                   onClick={cashOnDelivery}
+                  disabled={isPlacingOrder || !cartData.length}
                   className="btn-blue bg-red btn-lg btn-big mt-3"
                 >
-                  <IoBagCheckOutline /> &nbsp; Cash On Delivery
+                  <IoBagCheckOutline /> &nbsp;
+                  {isPlacingOrder ? "Processing..." : "Cash On Delivery"}
                 </Button>
               </div>
             </div>

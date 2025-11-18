@@ -4,28 +4,25 @@ import patern from "../../assets/images/pattern.webp";
 import { MyContext } from "../../App";
 import { MdEmail } from "react-icons/md";
 import { RiLockPasswordFill } from "react-icons/ri";
-import { IoMdEye } from "react-icons/io";
-import { IoMdEyeOff } from "react-icons/io";
+import { IoMdEye, IoMdEyeOff } from "react-icons/io";
 import Button from "@mui/material/Button";
-import { Link } from "react-router-dom";
-
-import googleIcon from "../../assets/images/googleIcon.png";
-import { useNavigate } from "react-router-dom";
-import { editData, postData } from "../../utils/api";
+import { Link, useNavigate } from "react-router-dom";
 import CircularProgress from "@mui/material/CircularProgress";
 
-import { initializeApp } from "firebase/app";
-import { getAuth, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
-import { firebaseApp } from "../../firebase";
+import { postData, editData } from "../../utils/api";
 
-const auth = getAuth(firebaseApp);
-const googleProvider = new GoogleAuthProvider();
+// If you want Google login later, you can keep these imports,
+// but for now button is commented out so it’s effectively disabled.
+// import { getAuth, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
+// import { firebaseApp } from "../../firebase";
+
+// const auth = getAuth(firebaseApp);
+// const googleProvider = new GoogleAuthProvider();
 
 const Login = () => {
   const [inputIndex, setInputIndex] = useState(null);
   const [isShowPassword, setisShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [isLogin, setIsLogin] = useState(false);
   const [isOpenVerifyEmailBox, setIsOpenVerifyEmailBox] = useState(false);
 
   const history = useNavigate();
@@ -34,19 +31,20 @@ const Login = () => {
   const [formfields, setFormfields] = useState({
     email: "",
     password: "",
-    isAdmin: true,
   });
 
   useEffect(() => {
+    // Hide header + sidebar on login page
     context.setisHideSidebarAndHeader(true);
 
     const token = localStorage.getItem("token");
-    if (token !== "" && token !== undefined && token !== null) {
-      setIsLogin(true);
-      history("/");
+    if (token) {
+      // Already logged in → go to dashboard
+      history("/dashboard");
     } else {
       history("/login");
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const focusInput = (index) => {
@@ -54,123 +52,151 @@ const Login = () => {
   };
 
   const onchangeInput = (e) => {
-    setFormfields(() => ({
-      ...formfields,
+    setFormfields((prev) => ({
+      ...prev,
       [e.target.name]: e.target.value,
     }));
   };
 
-  const signIn = (e) => {
+  const signIn = async (e) => {
     e.preventDefault();
 
-    if (formfields.email === "") {
+    if (!formfields.email) {
       context.setAlertBox({
         open: true,
         error: true,
-        msg: "email can not be blank!",
+        msg: "Email cannot be blank!",
       });
-      return false;
+      return;
     }
 
-    if (isOpenVerifyEmailBox === false) {
-      if (formfields.password === "") {
+    if (!isOpenVerifyEmailBox && !formfields.password) {
+      context.setAlertBox({
+        open: true,
+        error: true,
+        msg: "Password cannot be blank!",
+      });
+      return;
+    }
+
+    // -------- NORMAL LOGIN FLOW --------
+    if (!isOpenVerifyEmailBox) {
+      try {
+        setIsLoading(true);
+        const res = await postData("/api/user/signin", formfields);
+
+        // Backend error (wrong cred, etc.)
+        if (res?.error === true) {
+          if (res?.isVerify === false) {
+            // user exists but email not verified yet
+            setIsOpenVerifyEmailBox(true);
+          }
+
+          context.setAlertBox({
+            open: true,
+            error: true,
+            msg: res?.msg || "Login failed",
+          });
+          setIsLoading(false);
+          return;
+        }
+
+        // ✅ At this point, credentials are valid. NOW enforce admin.
+        if (!res?.user?.isAdmin) {
+          context.setAlertBox({
+            open: true,
+            error: true,
+            msg: "You are not an admin.",
+          });
+          setIsLoading(false);
+          return;
+        }
+
+        // ✅ Admin user → store token and user
+        const adminUser = {
+          name: res.user?.name,
+          email: res.user?.email,
+          userId: res.user?.id,
+          isAdmin: true,
+        };
+
+        localStorage.setItem("token", res.token);
+        localStorage.setItem("user", JSON.stringify(adminUser));
+
+        // Sync React context so RequireAdmin works
+        context.setUser(adminUser);
+        context.setIsLogin(true);
+
+        context.setAlertBox({
+          open: true,
+          error: false,
+          msg: "Admin login successful!",
+        });
+
+        setTimeout(() => {
+          context.setisHideSidebarAndHeader(false);
+          history("/dashboard");
+          setIsLoading(false);
+        }, 1000);
+      } catch (error) {
+        console.error(error);
         context.setAlertBox({
           open: true,
           error: true,
-          msg: "password can not be blank!",
+          msg: "Something went wrong during login.",
         });
-        return false;
+        setIsLoading(false);
       }
-
-      setIsLoading(true);
-      postData("/api/user/signin", formfields).then((res) => {
-        try {
-          if (res.error !== true) {
-            localStorage.setItem("token", res.token);
-
-            if (res.user?.isAdmin === true) {
-              const user = {
-                name: res.user?.name,
-                email: res.user?.email,
-                userId: res.user?.id,
-                isAdmin: res.user?.isAdmin,
-              };
-
-              localStorage.removeItem("user");
-              localStorage.setItem("user", JSON.stringify(user));
-
-              context.setAlertBox({
-                open: true,
-                error: false,
-                msg: "User Login Successfully!",
-              });
-
-              setTimeout(() => {
-                context.setIsLogin(true);
-                history("/dashboard");
-                setIsLoading(false);
-                // window.location.href = "/dashboard";
-              }, 2000);
-            } else {
-              context.setAlertBox({
-                open: true,
-                error: true,
-                msg: "you are not a admin",
-              });
-              setIsLoading(false);
-            }
-          }
-          else {
-            if (res?.isVerify === false) {
-              setIsLoading(true);
-              setIsOpenVerifyEmailBox(true);
-            }
-
-            context.setAlertBox({
-              open: true,
-              error: true,
-              msg: res.msg,
-            });
-            setIsLoading(false);
-          }
-        } catch (error) {
-          console.log(error);
-          setIsLoading(false);
-        }
-      });
+      return;
     }
 
-    if (isOpenVerifyEmailBox === true) {
-      localStorage.setItem("userEmail", formfields.email);
-      postData("/api/user/verifyAccount/resendOtp", {
-        email: formfields.email,
-      }).then((res) => {
-        if (res?.otp !== null && res?.otp !== "") {
-          editData(
-            `/api/user/verifyAccount/emailVerify/${res.existingUserId}`,
+    // -------- EMAIL VERIFY RESEND FLOW --------
+    if (isOpenVerifyEmailBox) {
+      try {
+        setIsLoading(true);
+        localStorage.setItem("userEmail", formfields.email);
+
+        const resendRes = await postData("/api/user/verifyAccount/resendOtp", {
+          email: formfields.email,
+        });
+
+        if (resendRes?.otp) {
+          await editData(
+            `/api/user/verifyAccount/emailVerify/${resendRes.existingUserId}`,
             {
               email: formfields.email,
-              otp: res?.otp,
+              otp: resendRes.otp,
             }
-          ).then((res) => {
-            setTimeout(() => {
-              setIsLoading(true);
-              history("/verify-account");
-              //window.location.href="/signIn";
-            }, 2000);
+          );
+
+          setTimeout(() => {
+            history("/verify-account");
+          }, 1000);
+        } else {
+          context.setAlertBox({
+            open: true,
+            error: true,
+            msg: resendRes?.msg || "Failed to resend OTP",
           });
         }
-        console.log(res);
-      });
+      } catch (err) {
+        console.error(err);
+        context.setAlertBox({
+          open: true,
+          error: true,
+          msg: "Error while resending verification OTP",
+        });
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
+  // If you want Google admin login later, you can harden like this:
+  /*
   const signInWithGoogle = () => {
     signInWithPopup(auth, googleProvider)
       .then((result) => {
-        const credential = GoogleAuthProvider.credentialFromResult(result);
-        const token = credential.accessToken;
-        // The signed-in user info.
         const user = result.user;
 
         const fields = {
@@ -179,84 +205,84 @@ const Login = () => {
           password: null,
           images: user.providerData[0].photoURL,
           phone: user.providerData[0].phoneNumber,
-          isAdmin: true,
         };
 
         postData("/api/user/authWithGoogle", fields).then((res) => {
           try {
-            if (res.error !== true) {
-              localStorage.setItem("token", res.token);
-
-              const user = {
-                name: res.user?.name,
-                email: res.user?.email,
-                userId: res.user?.id,
-              };
-
-              localStorage.setItem("user", JSON.stringify(user));
-
-              context.setAlertBox({
-                open: true,
-                error: false,
-                msg: res.msg,
-              });
-
-              setTimeout(() => {
-                context.setIsLogin(true);
-                history("/dashboard");
-              }, 2000);
-            } else {
+            if (res.error === true) {
               context.setAlertBox({
                 open: true,
                 error: true,
                 msg: res.msg,
               });
               setIsLoading(false);
+              return;
             }
+
+            if (!res.user?.isAdmin) {
+              context.setAlertBox({
+                open: true,
+                error: true,
+                msg: "You are not an admin.",
+              });
+              setIsLoading(false);
+              return;
+            }
+
+            const adminUser = {
+              name: res.user?.name,
+              email: res.user?.email,
+              userId: res.user?.id,
+              isAdmin: true,
+            };
+
+            localStorage.setItem("token", res.token);
+            localStorage.setItem("user", JSON.stringify(adminUser));
+
+            context.setUser(adminUser);
+            context.setIsLogin(true);
+
+            context.setAlertBox({
+              open: true,
+              error: false,
+              msg: res.msg || "Login successful",
+            });
+
+            setTimeout(() => {
+              context.setisHideSidebarAndHeader(false);
+              history("/dashboard");
+            }, 1000);
           } catch (error) {
             console.log(error);
             setIsLoading(false);
           }
         });
-
-        context.setAlertBox({
-          open: true,
-          error: false,
-          msg: "User authentication Successfully!",
-        });
-
-        // window.location.href = "/";
       })
       .catch((error) => {
-        // Handle Errors here.
-        const errorCode = error.code;
-        const errorMessage = error.message;
-        // The email of the user's account used.
-        const email = error.customData.email;
-        // The AuthCredential type that was used.
-        const credential = GoogleAuthProvider.credentialFromError(error);
         context.setAlertBox({
           open: true,
           error: true,
-          msg: errorMessage,
+          msg: error.message,
         });
-        // ...
       });
   };
+  */
 
   return (
     <>
-      <img src={patern} className="loginPatern" />
+      <img src={patern} className="loginPatern" alt="pattern" />
       <section className="loginSection">
         <div className="loginBox">
-          <Link to={"/"} className="d-flex align-items-center flex-column logo">
-            <img src={Logo} />
+          <Link
+            to={"/"}
+            className="d-flex align-items-center flex-column logo"
+          >
+            <img src={Logo} alt="Thriftkart Admin" />
             <span className="ml-2">ADMIN LOGIN</span>
           </Link>
+
           <div className="wrapper mt-3 card border">
-            {isOpenVerifyEmailBox === true && (
-              <h2 className="mb-4">Verify Email</h2>
-            )}
+            {isOpenVerifyEmailBox && <h2 className="mb-4">Verify Email</h2>}
 
             <form onSubmit={signIn}>
               <div
@@ -270,7 +296,7 @@ const Login = () => {
                 <input
                   type="text"
                   className="form-control"
-                  placeholder="enter your email"
+                  placeholder="Enter your email"
                   onFocus={() => focusInput(0)}
                   onBlur={() => setInputIndex(null)}
                   autoFocus
@@ -279,7 +305,7 @@ const Login = () => {
                 />
               </div>
 
-              {isOpenVerifyEmailBox === false ? (
+              {!isOpenVerifyEmailBox ? (
                 <>
                   <div
                     className={`form-group position-relative ${
@@ -290,9 +316,9 @@ const Login = () => {
                       <RiLockPasswordFill />
                     </span>
                     <input
-                      type={`${isShowPassword === true ? "text" : "password"}`}
+                      type={isShowPassword ? "text" : "password"}
                       className="form-control"
-                      placeholder="enter your password"
+                      placeholder="Enter your password"
                       onFocus={() => focusInput(1)}
                       onBlur={() => setInputIndex(null)}
                       name="password"
@@ -303,7 +329,7 @@ const Login = () => {
                       className="toggleShowPassword"
                       onClick={() => setisShowPassword(!isShowPassword)}
                     >
-                      {isShowPassword === true ? <IoMdEyeOff /> : <IoMdEye />}
+                      {isShowPassword ? <IoMdEyeOff /> : <IoMdEye />}
                     </span>
                   </div>
 
@@ -311,8 +337,9 @@ const Login = () => {
                     <Button
                       type="submit"
                       className="btn-blue btn-lg w-100 btn-big"
+                      disabled={isLoading}
                     >
-                      {isLoading === true ? <CircularProgress /> : "Sign In "}
+                      {isLoading ? <CircularProgress size={24} /> : "Sign In"}
                     </Button>
                   </div>
 
@@ -320,31 +347,39 @@ const Login = () => {
                     <Link to={"/forgot-password"} className="link">
                       FORGOT PASSWORD
                     </Link>
+
                     <div className="d-flex align-items-center justify-content-center or mt-3 mb-3">
                       <span className="line"></span>
                       <span className="txt">or</span>
                       <span className="line"></span>
                     </div>
 
-                    {/* <Button
+                    {/* Google login disabled for now for security / clarity */}
+                    {/*
+                    <Button
                       variant="outlined"
                       className="w-100 btn-lg btn-big loginWithGoogle"
                       onClick={signInWithGoogle}
                     >
-                      <img src={googleIcon} width="25px" /> &nbsp; Sign In with
-                      Google
-                    </Button> */}
+                      <img src={googleIcon} width="25px" alt="Google" /> &nbsp;
+                      Sign In with Google
+                    </Button>
+                    */}
                   </div>
                 </>
               ) : (
-                <Button type="submit" className="btn-blue btn-lg w-100 btn-big">
-                  {isLoading === true ? <CircularProgress /> : "Verify Email "}
+                <Button
+                  type="submit"
+                  className="btn-blue btn-lg w-100 btn-big"
+                  disabled={isLoading}
+                >
+                  {isLoading ? <CircularProgress size={24} /> : "Verify Email"}
                 </Button>
               )}
             </form>
           </div>
 
-          {isOpenVerifyEmailBox === false && (
+          {!isOpenVerifyEmailBox && (
             <div className="wrapper mt-3 card border footer p-3">
               <span className="text-center">
                 Don't have an account?

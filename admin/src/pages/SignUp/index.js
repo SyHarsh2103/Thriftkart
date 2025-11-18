@@ -4,29 +4,21 @@ import patern from "../../assets/images/pattern.webp";
 import { MyContext } from "../../App";
 import { MdEmail } from "react-icons/md";
 import { RiLockPasswordFill } from "react-icons/ri";
-import { IoMdEye } from "react-icons/io";
-import { IoMdEyeOff } from "react-icons/io";
+import { IoMdEye, IoMdEyeOff } from "react-icons/io";
 import Button from "@mui/material/Button";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { FaUserCircle } from "react-icons/fa";
 import { IoShieldCheckmarkSharp } from "react-icons/io5";
-import FormControlLabel from "@mui/material/FormControlLabel";
-import Checkbox from "@mui/material/Checkbox";
 import { FaPhoneAlt } from "react-icons/fa";
-
-import googleIcon from "../../assets/images/googleIcon.png";
-import { IoMdHome } from "react-icons/io";
-import { postData } from "../../utils/api";
-
-import { useNavigate } from "react-router-dom";
 import CircularProgress from "@mui/material/CircularProgress";
 
-import { initializeApp } from "firebase/app";
-import { getAuth, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
-import { firebaseApp } from "../../firebase";
+import { postData } from "../../utils/api";
 
-const auth = getAuth(firebaseApp);
-const googleProvider = new GoogleAuthProvider();
+// If you later re-enable Google login, you can keep these imports ready:
+// import { getAuth, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
+// import { firebaseApp } from "../../firebase";
+// const auth = getAuth(firebaseApp);
+// const googleProvider = new GoogleAuthProvider();
 
 const SignUp = () => {
   const [inputIndex, setInputIndex] = useState(null);
@@ -40,230 +32,191 @@ const SignUp = () => {
     phone: "",
     password: "",
     confirmPassword: "",
-    isAdmin: true,
+    isAdmin: true, // ⚠️ server must NOT trust this, always validate/admin-only
   });
 
-  const history = useNavigate();
-
+  const navigate = useNavigate();
   const context = useContext(MyContext);
 
   useEffect(() => {
     context.setisHideSidebarAndHeader(true);
     window.scrollTo(0, 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const focusInput = (index) => {
-    setInputIndex(index);
-  };
+  const focusInput = (index) => setInputIndex(index);
 
   const onchangeInput = (e) => {
-    setFormfields(() => ({
-      ...formfields,
-      [e.target.name]: e.target.value,
+    const { name, value } = e.target;
+    setFormfields((prev) => ({
+      ...prev,
+      [name]: value,
     }));
   };
 
-  const signUp = (e) => {
-    e.preventDefault();
-    try {
-      if (formfields.name === "") {
-        context.setAlertBox({
-          open: true,
-          error: true,
-          msg: "name can not be blank!",
-        });
-        return false;
-      }
+  const validateForm = () => {
+    const name = formfields.name.trim();
+    const email = formfields.email.trim().toLowerCase();
+    const phone = formfields.phone.trim();
+    const password = formfields.password;
+    const confirmPassword = formfields.confirmPassword;
 
-      if (formfields.email === "") {
-        context.setAlertBox({
-          open: true,
-          error: true,
-          msg: "email can not be blank!",
-        });
-        return false;
-      }
-
-      if (formfields.phone === "") {
-        context.setAlertBox({
-          open: true,
-          error: true,
-          msg: "phone can not be blank!",
-        });
-        return false;
-      }
-
-      if (formfields.password === "") {
-        context.setAlertBox({
-          open: true,
-          error: true,
-          msg: "password can not be blank!",
-        });
-        return false;
-      }
-
-      if (formfields.confirmPassword === "") {
-        context.setAlertBox({
-          open: true,
-          error: true,
-          msg: "confirm password can not be blank!",
-        });
-        return false;
-      }
-
-      if (formfields.confirmPassword !== formfields.password) {
-        context.setAlertBox({
-          open: true,
-          error: true,
-          msg: "password not match",
-        });
-        return false;
-      }
-
-      setIsLoading(true);
-
-      postData("/api/user/signup", formfields)
-        .then((res) => {
-          console.log(res);
-
-          if (res.status !== "FAILED") {
-          
-            localStorage.setItem("userEmail", formfields.email);
-
-            setTimeout(() => {
-              setIsLoading(true);
-              history("/verify-account");
-            }, 2000);
-          } else {
-            setIsLoading(false);
-            context.setAlertBox({
-              open: true,
-              error: true,
-              msg: res.msg,
-            });
-          }
-        })
-        .catch((error) => {
-          setIsLoading(false);
-          console.error("Error posting data:", error);
-          // Handle error (e.g., show an error message)
-        });
-    } catch (error) {
-      console.log(error);
+    if (!name) {
+      context.setAlertBox({
+        open: true,
+        error: true,
+        msg: "Name can not be blank!",
+      });
+      return false;
     }
+
+    if (!email) {
+      context.setAlertBox({
+        open: true,
+        error: true,
+        msg: "Email can not be blank!",
+      });
+      return false;
+    }
+
+    // basic email pattern
+    const emailRegex = /^\S+@\S+\.\S+$/;
+    if (!emailRegex.test(email)) {
+      context.setAlertBox({
+        open: true,
+        error: true,
+        msg: "Please enter a valid email address.",
+      });
+      return false;
+    }
+
+    if (!phone) {
+      context.setAlertBox({
+        open: true,
+        error: true,
+        msg: "Phone can not be blank!",
+      });
+      return false;
+    }
+
+    if (!password) {
+      context.setAlertBox({
+        open: true,
+        error: true,
+        msg: "Password can not be blank!",
+      });
+      return false;
+    }
+
+    if (password.length < 6) {
+      context.setAlertBox({
+        open: true,
+        error: true,
+        msg: "Password must be at least 6 characters.",
+      });
+      return false;
+    }
+
+    if (!confirmPassword) {
+      context.setAlertBox({
+        open: true,
+        error: true,
+        msg: "Confirm password can not be blank!",
+      });
+      return false;
+    }
+
+    if (confirmPassword !== password) {
+      context.setAlertBox({
+        open: true,
+        error: true,
+        msg: "Password and confirm password do not match.",
+      });
+      return false;
+    }
+
+    return true;
   };
 
-  const signInWithGoogle = () => {
-    signInWithPopup(auth, googleProvider)
-      .then((result) => {
-        const credential = GoogleAuthProvider.credentialFromResult(result);
-        const token = credential.accessToken;
-        // The signed-in user info.
-        const user = result.user;
+  const signUp = async (e) => {
+    e.preventDefault();
 
-        const fields = {
-          name: user.providerData[0].displayName,
-          email: user.providerData[0].email,
-          password: null,
-          images: user.providerData[0].photoURL,
-          phone: user.providerData[0].phoneNumber,
-          isAdmin: true,
-        };
+    if (!validateForm()) return;
 
-        postData("/api/user/authWithGoogle", fields).then((res) => {
-          try {
-            if (res.error !== true) {
-              localStorage.setItem("token", res.token);
+    try {
+      setIsLoading(true);
 
-              const user = {
-                name: res.user?.name,
-                email: res.user?.email,
-                userId: res.user?.id,
-              };
+      const payload = {
+        name: formfields.name.trim(),
+        email: formfields.email.trim().toLowerCase(),
+        phone: formfields.phone.trim(),
+        password: formfields.password,
+        isAdmin: true, // server should verify this, not trust blindly
+      };
 
-              localStorage.setItem("user", JSON.stringify(user));
+      const res = await postData("/api/user/signup", payload);
 
-              context.setAlertBox({
-                open: true,
-                error: false,
-                msg: res.msg,
-              });
+      // Support both old {status:'FAILED'} and newer {success:false}
+      const isFailed = res?.status === "FAILED" || res?.error || res?.success === false;
 
-              setTimeout(() => {
-                context.setIsLogin(true);
-                history("/dashboard");
-              }, 2000);
-            } else {
-              context.setAlertBox({
-                open: true,
-                error: true,
-                msg: res.msg,
-              });
-              setIsLoading(false);
-            }
-          } catch (error) {
-            console.log(error);
-            setIsLoading(false);
-          }
-        });
+      if (!isFailed) {
+        // store email for OTP verification screen
+        localStorage.setItem("userEmail", payload.email);
 
         context.setAlertBox({
           open: true,
           error: false,
-          msg: "User authentication Successfully!",
+          msg: res?.message || res?.msg || "Admin account created. Verify your email.",
         });
 
-        // window.location.href = "/";
-      })
-      .catch((error) => {
-        // Handle Errors here.
-        const errorCode = error.code;
-        const errorMessage = error.message;
-        // The email of the user's account used.
-        const email = error.customData.email;
-        // The AuthCredential type that was used.
-        const credential = GoogleAuthProvider.credentialFromError(error);
+        setTimeout(() => {
+          navigate("/verify-account");
+        }, 800);
+      } else {
         context.setAlertBox({
           open: true,
           error: true,
-          msg: errorMessage,
+          msg: res?.msg || res?.message || "Registration failed.",
         });
-        // ...
+      }
+    } catch (error) {
+      console.error("Error posting data:", error);
+      context.setAlertBox({
+        open: true,
+        error: true,
+        msg: error?.message || "Something went wrong. Please try again.",
       });
+    } finally {
+      setIsLoading(false);
+    }
   };
+
+  // If/when you re-enable Google admin signup, plug it back in securely:
+  // const signInWithGoogle = () => { ... }
 
   return (
     <>
-      <img src={patern} className="loginPatern" />
+      <img src={patern} className="loginPatern" alt="" />
       <section className="loginSection signUpSection">
         <div className="row">
           <div className="col-md-8 d-flex align-items-center flex-column part1 justify-content-center">
             <h1>
               BEST UX/UI FASHION{" "}
-              <span className="text-sky">ECOMMERCE DASHBOARD</span> & ADMIN
-              PANEL
+              <span className="text-sky">ECOMMERCE DASHBOARD</span> & ADMIN PANEL
             </h1>
             <p>
-            Thriftkart is a modern fashion eCommerce platform designed to deliver the best user experience for both customers and administrators. With a sleek dashboard and powerful admin panel, Thriftkart simplifies product management, order tracking, and customer engagement. It combines cutting-edge design with intuitive navigation, making it easier than ever to manage your fashion business online.
+              Thriftkart is a modern fashion eCommerce platform designed to deliver the best
+              user experience for both customers and administrators. With a sleek dashboard
+              and powerful admin panel, Thriftkart simplifies product management, order
+              tracking, and customer engagement. It combines cutting-edge design with intuitive
+              navigation, making it easier than ever to manage your fashion business online.
             </p>
-
-            {/* <div className="w-100 mt-4">
-              <Link to={"/"}>
-                {" "}
-                <Button className="btn-blue btn-lg btn-big">
-                  <IoMdHome /> Go To Home
-                </Button>
-              </Link>
-            </div> */}
           </div>
 
           <div className="col-md-4 pr-0">
             <div className="loginBox">
-              <Link
-                to={"/"}
-                className="d-flex align-items-center flex-column logo"
-              >
-                <img src={Logo} />
+              <Link to={"/"} className="d-flex align-items-center flex-column logo">
+                <img src={Logo} alt="Thriftkart logo" />
                 <span className="ml-2">NEW ADMIN</span>
               </Link>
 
@@ -271,7 +224,7 @@ const SignUp = () => {
                 <form onSubmit={signUp}>
                   <div
                     className={`form-group position-relative ${
-                      inputIndex === 0 && "focus"
+                      inputIndex === 0 ? "focus" : ""
                     }`}
                   >
                     <span className="icon">
@@ -285,13 +238,14 @@ const SignUp = () => {
                       onBlur={() => setInputIndex(null)}
                       autoFocus
                       name="name"
+                      value={formfields.name}
                       onChange={onchangeInput}
                     />
                   </div>
 
                   <div
                     className={`form-group position-relative ${
-                      inputIndex === 1 && "focus"
+                      inputIndex === 1 ? "focus" : ""
                     }`}
                   >
                     <span className="icon">
@@ -304,125 +258,116 @@ const SignUp = () => {
                       onFocus={() => focusInput(1)}
                       onBlur={() => setInputIndex(null)}
                       name="email"
+                      value={formfields.email}
                       onChange={onchangeInput}
                     />
                   </div>
 
                   <div
                     className={`form-group position-relative ${
-                      inputIndex === 2 && "focus"
+                      inputIndex === 2 ? "focus" : ""
                     }`}
                   >
                     <span className="icon">
                       <FaPhoneAlt />
                     </span>
                     <input
-                      type="number"
+                      type="tel"
                       className="form-control"
-                      placeholder="enter your Phone"
+                      placeholder="enter your phone"
                       onFocus={() => focusInput(2)}
                       onBlur={() => setInputIndex(null)}
                       name="phone"
+                      value={formfields.phone}
                       onChange={onchangeInput}
                     />
                   </div>
 
                   <div
                     className={`form-group position-relative ${
-                      inputIndex === 3 && "focus"
+                      inputIndex === 3 ? "focus" : ""
                     }`}
                   >
                     <span className="icon">
                       <RiLockPasswordFill />
                     </span>
                     <input
-                      type={`${isShowPassword === true ? "text" : "password"}`}
+                      type={isShowPassword ? "text" : "password"}
                       className="form-control"
                       placeholder="enter your password"
                       onFocus={() => focusInput(3)}
                       onBlur={() => setInputIndex(null)}
                       name="password"
+                      value={formfields.password}
                       onChange={onchangeInput}
                     />
-
                     <span
                       className="toggleShowPassword"
-                      onClick={() => setisShowPassword(!isShowPassword)}
+                      onClick={() => setisShowPassword((prev) => !prev)}
                     >
-                      {isShowPassword === true ? <IoMdEyeOff /> : <IoMdEye />}
+                      {isShowPassword ? <IoMdEyeOff /> : <IoMdEye />}
                     </span>
                   </div>
 
                   <div
                     className={`form-group position-relative ${
-                      inputIndex === 4 && "focus"
+                      inputIndex === 4 ? "focus" : ""
                     }`}
                   >
                     <span className="icon">
                       <IoShieldCheckmarkSharp />
                     </span>
                     <input
-                      type={`${
-                        isShowConfirmPassword === true ? "text" : "password"
-                      }`}
+                      type={isShowConfirmPassword ? "text" : "password"}
                       className="form-control"
                       placeholder="confirm your password"
                       onFocus={() => focusInput(4)}
                       onBlur={() => setInputIndex(null)}
                       name="confirmPassword"
+                      value={formfields.confirmPassword}
                       onChange={onchangeInput}
                     />
-
                     <span
                       className="toggleShowPassword"
                       onClick={() =>
-                        setisShowConfirmPassword(!isShowConfirmPassword)
+                        setisShowConfirmPassword((prev) => !prev)
                       }
                     >
-                      {isShowConfirmPassword === true ? (
-                        <IoMdEyeOff />
-                      ) : (
-                        <IoMdEye />
-                      )}
+                      {isShowConfirmPassword ? <IoMdEyeOff /> : <IoMdEye />}
                     </span>
                   </div>
-
-                  {
-                    // <FormControlLabel
-                    //   control={<Checkbox />}
-                    //   label="I agree to the all Terms & Condiotions"
-                    // />
-                  }
 
                   <div className="form-group">
                     <Button
                       type="submit"
                       className="btn-blue btn-lg w-100 btn-big"
+                      disabled={isLoading}
                     >
-                      {isLoading === true ? <CircularProgress /> : "Sign Up "}
+                      {isLoading ? <CircularProgress size={24} /> : "Sign Up"}
                     </Button>
                   </div>
 
+                  {/* Google sign-up is commented out for now to keep admin creation stricter */}
                   {/* <div className="form-group text-center mb-0">
                     <div className="d-flex align-items-center justify-content-center or mt-3 mb-3">
                       <span className="line"></span>
                       <span className="txt">or</span>
                       <span className="line"></span>
                     </div>
-
                     <Button
                       variant="outlined"
                       className="w-100 btn-lg btn-big loginWithGoogle"
                       onClick={signInWithGoogle}
+                      disabled={isLoading}
                     >
-                      <img src={googleIcon} width="25px" /> &nbsp; Sign In with
-                      Google
+                      <img src={googleIcon} width="25px" alt="Google" /> &nbsp;
+                      Sign In with Google
                     </Button>
                   </div> */}
                 </form>
 
                 <span className="text-center d-block mt-3">
-                  Don't have an account?
+                  Already have an account?
                   <Link to={"/login"} className="link color ml-2">
                     Sign In
                   </Link>

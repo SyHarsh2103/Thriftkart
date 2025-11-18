@@ -6,6 +6,27 @@ const multer = require("multer");
 
 const { HomeBottomBanners } = require("../models/homeBottomBanner");
 
+// ===== Auth helpers (req.auth is set by authJwt in index.js) =====
+function requireAuth(req, res) {
+  if (!req.auth) {
+    res.status(401).json({ error: true, msg: "Unauthorized" });
+    return false;
+  }
+  return true;
+}
+
+function requireAdmin(req, res) {
+  if (!req.auth) {
+    res.status(401).json({ error: true, msg: "Unauthorized" });
+    return false;
+  }
+  if (!req.auth.isAdmin) {
+    res.status(403).json({ error: true, msg: "Admin only" });
+    return false;
+  }
+  return true;
+}
+
 // -------- ENV paths --------
 const UPLOAD_DIR =
   process.env.HOME_BOTTOM_BANNER_PATH ||
@@ -41,8 +62,13 @@ const upload = multer({
 const toImageUrls = (filenames = []) =>
   filenames.map((name) => `${BASE_URL}/uploads/homeBottomBanner/${name}`);
 
-// ---------------- UPLOAD ----------------
+// =====================================================
+// =========== UPLOAD (ADMIN – returns filenames) ======
+// =====================================================
+
 router.post("/upload", (req, res) => {
+  if (!requireAdmin(req, res)) return;
+
   upload.array("images", 10)(req, res, (err) => {
     if (err) {
       if (err.code === "LIMIT_FILE_SIZE") {
@@ -59,8 +85,13 @@ router.post("/upload", (req, res) => {
   });
 });
 
-// ---------------- CREATE ----------------
+// =====================================================
+// ================== CREATE (ADMIN) ===================
+// =====================================================
+
 router.post("/create", async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+
   try {
     const { images = [], catId, catName, subCatId, subCatName } = req.body;
 
@@ -80,7 +111,10 @@ router.post("/create", async (req, res) => {
   }
 });
 
-// ---------------- GET ALL ----------------
+// =====================================================
+// ================== GET ALL (PUBLIC) =================
+// =====================================================
+
 router.get("/", async (req, res) => {
   try {
     const list = await HomeBottomBanners.find();
@@ -94,7 +128,10 @@ router.get("/", async (req, res) => {
   }
 });
 
-// ---------------- GET BY ID ----------------
+// =====================================================
+// ================= GET BY ID (PUBLIC) ================
+// =====================================================
+
 router.get("/:id", async (req, res) => {
   try {
     const banner = await HomeBottomBanners.findById(req.params.id);
@@ -109,8 +146,13 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-// ---------------- DELETE SINGLE IMAGE ----------------
+// =====================================================
+// ===== DELETE SINGLE IMAGE (ADMIN, by filename) ======
+// =====================================================
+
 router.delete("/deleteImage", async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+
   try {
     let img = req.query.img;
     if (!img) {
@@ -127,16 +169,25 @@ router.delete("/deleteImage", async (req, res) => {
     const filePath = path.join(UPLOAD_DIR, img);
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
-      return res.status(200).json({ success: true, message: "Image deleted" });
+      return res
+        .status(200)
+        .json({ success: true, message: "Image deleted" });
     }
-    return res.status(404).json({ success: false, message: "Image not found" });
+    return res
+      .status(404)
+      .json({ success: false, message: "Image not found" });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// ---------------- DELETE WHOLE BANNER ----------------
+// =====================================================
+// ============= DELETE BANNER (ADMIN) =================
+// =====================================================
+
 router.delete("/:id", async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+
   try {
     const banner = await HomeBottomBanners.findById(req.params.id);
     if (!banner)
@@ -158,8 +209,13 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
-// ---------------- UPDATE ----------------
+// =====================================================
+// ================== UPDATE (ADMIN) ===================
+// =====================================================
+
 router.put("/:id", async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+
   try {
     const { images, catId, catName, subCatId, subCatName } = req.body;
 

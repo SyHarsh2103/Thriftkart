@@ -2,12 +2,12 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import "./App.css";
 import "./responsive.css";
 
-import { Route, Routes, useLocation } from "react-router-dom";
+import { Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import Home from "./Pages/Home";
 import Listing from "./Pages/Listing";
 import ProductDetails from "./Pages/ProductDetails";
 import Header from "./Components/Header";
-import { createContext, useEffect, useState } from "react";
+import { createContext, useEffect, useState, useContext } from "react";
 import axios from "axios";
 import Footer from "./Components/Footer";
 import ScrollToTop from "./Components/Scrollbar";
@@ -34,6 +34,29 @@ import Contact from "./Pages/Contact";
 
 const MyContext = createContext();
 
+/**
+ * Simple wrapper to protect routes that require login.
+ * If not logged in → show alert + redirect to /signIn.
+ */
+const RequireAuth = ({ children }) => {
+  const { isLogin, setAlertBox } = useContext(MyContext);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!isLogin) {
+      setAlertBox({
+        open: true,
+        error: true,
+        msg: "Please login first",
+      });
+      navigate("/signIn");
+    }
+  }, [isLogin, navigate, setAlertBox]);
+
+  if (!isLogin) return null;
+  return children;
+};
+
 function App() {
   const location = useLocation();
 
@@ -56,7 +79,11 @@ function App() {
   const [isOpenFilters, setIsOpenFilters] = useState(false);
   const [isBottomShow, setIsBottomShow] = useState(true);
 
-  const [alertBox, setAlertBox] = useState({ msg: "", error: false, open: false });
+  const [alertBox, setAlertBox] = useState({
+    msg: "",
+    error: false,
+    open: false,
+  });
 
   const [user, setUser] = useState({ name: "", email: "", userId: "" });
 
@@ -99,7 +126,9 @@ function App() {
   const getCartData = () => {
     const user = JSON.parse(localStorage.getItem("user"));
     if (!user?.userId) return;
-    fetchDataFromApi(`/api/cart?userId=${user?.userId}`).then((res) => setCartData(res));
+    fetchDataFromApi(`/api/cart?userId=${user?.userId}`).then((res) =>
+      setCartData(res)
+    );
   };
 
   useEffect(() => {
@@ -135,16 +164,28 @@ function App() {
       setAddingInCart(true);
       postData(`/api/cart/add`, data).then((res) => {
         if (res.status !== false) {
-          setAlertBox({ open: true, error: false, msg: "Item is added in the cart" });
+          setAlertBox({
+            open: true,
+            error: false,
+            msg: "Item is added in the cart",
+          });
           setTimeout(() => setAddingInCart(false), 1000);
           getCartData();
         } else {
-          setAlertBox({ open: true, error: true, msg: res.msg });
+          setAlertBox({
+            open: true,
+            error: true,
+            msg: res.msg,
+          });
           setAddingInCart(false);
         }
       });
     } else {
-      setAlertBox({ open: true, error: true, msg: "Please login first" });
+      setAlertBox({
+        open: true,
+        error: true,
+        msg: "Please login first",
+      });
     }
   };
 
@@ -188,7 +229,12 @@ function App() {
 
   return (
     <MyContext.Provider value={values}>
-      <Snackbar open={alertBox.open} autoHideDuration={6000} onClose={handleClose} className="snackbar">
+      <Snackbar
+        open={alertBox.open}
+        autoHideDuration={6000}
+        onClose={handleClose}
+        className="snackbar"
+      >
         <Alert
           onClose={handleClose}
           autoHideDuration={6000}
@@ -206,25 +252,75 @@ function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         {/* Force remount on path change */}
-        <Route path="/products/category/:id" element={<Listing key={location.pathname} />} />
-        <Route path="/products/subCat/:id" element={<Listing key={location.pathname} />} />
-        <Route path="/products/:id" element={<ProductDetails key={location.pathname} />} />
-        <Route path="/cart" element={<Cart />} />
+        <Route
+          path="/products/category/:id"
+          element={<Listing key={location.pathname} />}
+        />
+        <Route
+          path="/products/subCat/:id"
+          element={<Listing key={location.pathname} />}
+        />
+        <Route
+          path="/products/:id"
+          element={<ProductDetails key={location.pathname} />}
+        />
+
+        {/* Public routes */}
         <Route path="/signIn" element={<SignIn />} />
-        <Route path="/forgotPassword" element={<ForgotPassword />} />
         <Route path="/signUp" element={<SignUp />} />
-        <Route path="/my-list" element={<MyList />} />
-        <Route path="/checkout" element={<Checkout />} />
-        <Route path="/orders" element={<Orders />} />
-        <Route path="/my-account" element={<MyAccount />} />
-        <Route path="/search" element={<SearchPage />} />
+        <Route path="/forgotPassword" element={<ForgotPassword />} />
         <Route path="/verifyOTP" element={<VerifyOTP />} />
-        <Route path="/changePassword" element={<ChangePassword />} />
         <Route path="/about-us" element={<AboutUs />} />
         <Route path="/terms-conditions" element={<TermsConditions />} />
         <Route path="/privacy-policy" element={<PrivacyPolicy />} />
         <Route path="/refund-policy" element={<RefundPolicy />} />
         <Route path="/contact" element={<Contact />} />
+        <Route path="/search" element={<SearchPage />} />
+
+        {/* Routes that make sense even if not logged in (optional) */}
+        <Route path="/cart" element={<Cart />} />
+
+        {/* Protected routes (login required) */}
+        <Route
+          path="/checkout"
+          element={
+            <RequireAuth>
+              <Checkout />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/orders"
+          element={
+            <RequireAuth>
+              <Orders />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/my-account"
+          element={
+            <RequireAuth>
+              <MyAccount />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/my-list"
+          element={
+            <RequireAuth>
+              <MyList />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/changePassword"
+          element={
+            <RequireAuth>
+              <ChangePassword />
+            </RequireAuth>
+          }
+        />
       </Routes>
 
       {isHeaderFooterShow && <Footer />}

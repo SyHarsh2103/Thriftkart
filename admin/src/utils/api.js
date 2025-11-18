@@ -1,88 +1,157 @@
+// admin/src/utils/api.js
 import axios from "axios";
 
-const getAuthHeaders = () => {
-  const token = localStorage.getItem("token");
-  return {
-    Authorization: `Bearer ${token}`,
-    "Content-Type": "application/json",
-  };
-};
+// ---------- Axios instance ----------
 
-// -------- GET --------
-export const fetchDataFromApi = async (url) => {
-  try {
-    const { data } = await axios.get(process.env.REACT_APP_BASE_URL + url, {
-      headers: getAuthHeaders(),
-    });
-    return data;
-  } catch (error) {
-    console.error("fetchDataFromApi error:", error);
-    return { success: false, msg: "Request failed" };
-  }
-};
+const api = axios.create({
+  baseURL: process.env.REACT_APP_BASE_URL || "",
+  timeout: 30000,
+});
 
-// -------- POST (file upload) --------
-export const uploadImage = async (url, formData) => {
-  try {
-    const { data } = await axios.post(process.env.REACT_APP_BASE_URL + url, formData, {
-      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }, 
-    });
-    return data; // expected: array of uploaded filenames
-  } catch (error) {
-    console.error("uploadImage error:", error);
-    return { success: false, msg: "Upload failed" };
-  }
-};
+// Attach freshest token on every request
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem("token");
 
-// -------- POST (JSON) --------
-export const postData = async (url, formData) => {
-  try {
-    const { data } = await axios.post(process.env.REACT_APP_BASE_URL + url, formData, {
-      headers: getAuthHeaders(),
-    });
-    return data;
-  } catch (error) {
-    console.error("postData error:", error);
-    return { success: false, msg: "Request failed" };
-  }
-};
+    if (token) {
+      config.headers = config.headers || {};
+      config.headers.Authorization = `Bearer ${token}`;
+    }
 
-// -------- PUT --------
-export const editData = async (url, updatedData) => {
-  try {
-    const { data } = await axios.put(process.env.REACT_APP_BASE_URL + url, updatedData, {
-      headers: getAuthHeaders(),
-    });
-    return data;
-  } catch (error) {
-    console.error("editData error:", error);
-    return { success: false, msg: "Update failed" };
-  }
-};
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
 
-// -------- DELETE (no body) --------
-export const deleteData = async (url) => {
-  try {
-    const { data } = await axios.delete(process.env.REACT_APP_BASE_URL + url, {
-      headers: getAuthHeaders(),
-    });
-    return data;
-  } catch (error) {
-    console.error("deleteData error:", error);
-    return { success: false, msg: "Delete failed" };
-  }
-};
+// Normalize errors so all admin pages can handle them the same way
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    // Request was cancelled
+    if (
+      axios.isCancel?.(error) ||
+      error?.code === "ERR_CANCELED" ||
+      error?.name === "CanceledError"
+    ) {
+      error.isCanceled = true;
+      return Promise.reject(error);
+    }
 
-// -------- DELETE (with body e.g. image) --------
-export const deleteImages = async (url, body = {}) => {
-  try {
-    const { data } = await axios.delete(process.env.REACT_APP_BASE_URL + url, {
-      headers: getAuthHeaders(),
-      data: body, // <-- axios lets you send a body in DELETE
-    });
-    return data;
-  } catch (error) {
-    console.error("deleteImages error:", error);
-    return { success: false, msg: "Delete image failed" };
+    const msg =
+      error?.response?.data?.message ||
+      error?.response?.data?.msg ||
+      error?.response?.data?.error ||
+      error.message ||
+      "Request failed";
+
+    const enriched = new Error(msg);
+    enriched.status = error?.response?.status;
+    enriched.data = error?.response?.data;
+    enriched.code = error?.code;
+
+    // 🔐 Global handling for unauthorized / admin-only cases
+    if (enriched.status === 401 || enriched.status === 403) {
+      const msgLower = (enriched.message || "").toLowerCase();
+
+      if (
+        msgLower.includes("admin only") ||
+        msgLower.includes("unauthorized") ||
+        msgLower.includes("jwt") // e.g. invalid token
+      ) {
+        try {
+          localStorage.removeItem("token");
+          localStorage.removeItem("user");
+        } catch (e) {
+          console.error("Failed to clear auth storage", e);
+        }
+
+        // Redirect to admin login
+        window.location.href = "/login";
+
+        // ✅ Resolve with safe data so UI doesn't crash
+        return Promise.resolve({ data: null });
+      }
+    }
+
+    // For all other errors, let caller decide
+    return Promise.reject(enriched);
   }
-};
+);
+
+// ---------- Helper functions ----------
+
+// GET
+export async function fetchDataFromApi(url, opts = {}) {
+  const { params, signal, headers } = opts;
+  const res = await api.get(url, { params, signal, headers });
+  return res.data;
+}
+
+// POST (JSON or FormData)
+export async function postData(url, body, opts = {}) {
+  const { params, signal, headers } = opts;
+  const isFormData =
+    typeof FormData !== "undefined" && body instanceof FormData;
+
+  const res = await api.post(url, body, {
+    params,
+    signal,
+    headers: {
+      ...(headers || {}),
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
+    },
+  });
+  return res.data;
+}
+
+// PUT
+export async function editData(url, body, opts = {}) {
+  const { params, signal, headers } = opts;
+  const isFormData =
+    typeof FormData !== "undefined" && body instanceof FormData;
+
+  const res = await api.put(url, body, {
+    params,
+    signal,
+    headers: {
+      ...(headers || {}),
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
+    },
+  });
+  return res.data;
+}
+
+// DELETE (no body)
+export async function deleteData(url, opts = {}) {
+  const { params, signal, headers } = opts;
+  const res = await api.delete(url, { params, signal, headers });
+  return res.data;
+}
+
+// DELETE (with body – e.g. delete image)
+export async function deleteImages(url, body = {}, opts = {}) {
+  const { params, signal, headers } = opts;
+  const res = await api.delete(url, {
+    params,
+    signal,
+    headers,
+    data: body,
+  });
+  return res.data;
+}
+
+// Multipart upload (images, etc.)
+export async function uploadImage(url, formData, opts = {}) {
+  const { params, signal, headers } = opts;
+  const res = await api.post(url, formData, {
+    params,
+    signal,
+    headers: {
+      ...(headers || {}),
+      // Let axios set correct multipart boundary for FormData
+    },
+  });
+  return res.data;
+}
+
+export default api;

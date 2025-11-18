@@ -10,6 +10,29 @@ const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
 
+const NODE_ENV = process.env.NODE_ENV || "development";
+
+// ===== Auth helpers (req.auth comes from authJwt in index.js) =====
+function requireAuth(req, res) {
+  if (!req.auth) {
+    res.status(401).json({ error: true, msg: "Unauthorized" });
+    return false;
+  }
+  return true;
+}
+
+function requireAdmin(req, res) {
+  if (!req.auth) {
+    res.status(401).json({ error: true, msg: "Unauthorized" });
+    return false;
+  }
+  if (!req.auth.isAdmin) {
+    res.status(403).json({ error: true, msg: "Admin only" });
+    return false;
+  }
+  return true;
+}
+
 // -------- ENV paths --------
 const UPLOAD_DIR =
   process.env.PRODUCT_IMAGE_PATH ||
@@ -83,8 +106,13 @@ const envelope = ({ products, total, page, perPage }) => ({
   perPage,
 });
 
-// ---------------- UPLOAD ----------------
+// =====================================================
+// ================== UPLOAD (ADMIN) ===================
+// =====================================================
+
 router.post("/upload", (req, res) => {
+  if (!requireAdmin(req, res)) return;
+
   upload.array("images", 10)(req, res, (err) => {
     if (err) {
       if (err.code === "LIMIT_FILE_SIZE") {
@@ -99,8 +127,13 @@ router.post("/upload", (req, res) => {
   });
 });
 
-// ---------------- CREATE PRODUCT ----------------
+// =====================================================
+// ================ CREATE PRODUCT (ADMIN) =============
+// =====================================================
+
 router.post("/create", async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+
   try {
     const category = await Category.findById(req.body.category);
     if (!category) return res.status(404).send("Invalid Category!");
@@ -143,12 +176,18 @@ router.post("/create", async (req, res) => {
   }
 });
 
-// ---------------- GET (generic with pagination) ----------------
+// =====================================================
+// ======= GENERIC LIST (PUBLIC, PAGINATED) ============
+// =====================================================
+
 // Supports: ?catId= | ?subCatId= | ?location= | ?page= | ?perPage=
 router.get("/", async (req, res) => {
   try {
     const page = Math.max(1, parseIntOr(req.query.page, 1));
-    const perPage = Math.min(100, Math.max(1, parseIntOr(req.query.perPage, 10)));
+    const perPage = Math.min(
+      100,
+      Math.max(1, parseIntOr(req.query.perPage, 10))
+    );
 
     const query = buildBaseQuery({
       catId: req.query.catId,
@@ -172,11 +211,17 @@ router.get("/", async (req, res) => {
   }
 });
 
-// ---------------- CATEGORY FILTERS (now paginated + location) ----------------
+// =====================================================
+// ============ CATEGORY FILTERS (PUBLIC) ==============
+// =====================================================
+
 router.get("/catName", async (req, res) => {
   try {
     const page = Math.max(1, parseIntOr(req.query.page, 1));
-    const perPage = Math.min(100, Math.max(1, parseIntOr(req.query.perPage, 10)));
+    const perPage = Math.min(
+      100,
+      Math.max(1, parseIntOr(req.query.perPage, 10))
+    );
     const location = req.query.location;
 
     const query = {
@@ -204,7 +249,10 @@ router.get("/catName", async (req, res) => {
 router.get("/catId", async (req, res) => {
   try {
     const page = Math.max(1, parseIntOr(req.query.page, 1));
-    const perPage = Math.min(100, Math.max(1, parseIntOr(req.query.perPage, 10)));
+    const perPage = Math.min(
+      100,
+      Math.max(1, parseIntOr(req.query.perPage, 10))
+    );
     const query = buildBaseQuery({
       catId: req.query.catId,
       location: req.query.location,
@@ -230,7 +278,10 @@ router.get("/catId", async (req, res) => {
 router.get("/subCatId", async (req, res) => {
   try {
     const page = Math.max(1, parseIntOr(req.query.page, 1));
-    const perPage = Math.min(100, Math.max(1, parseIntOr(req.query.perPage, 10)));
+    const perPage = Math.min(
+      100,
+      Math.max(1, parseIntOr(req.query.perPage, 10))
+    );
     const query = buildBaseQuery({
       subCatId: req.query.subCatId,
       location: req.query.location,
@@ -252,12 +303,17 @@ router.get("/subCatId", async (req, res) => {
   }
 });
 
-// ---------------- FILTER BY PRICE (Mongo-side, paginated) ----------------
-// /api/products/fiterByPrice?minPrice=&maxPrice=&catId=|subCatId=&location=&page=&perPage=
+// =====================================================
+// ============= FILTER BY PRICE (PUBLIC) ==============
+// =====================================================
+
 router.get("/fiterByPrice", async (req, res) => {
   try {
     const page = Math.max(1, parseIntOr(req.query.page, 1));
-    const perPage = Math.min(100, Math.max(1, parseIntOr(req.query.perPage, 10)));
+    const perPage = Math.min(
+      100,
+      Math.max(1, parseIntOr(req.query.perPage, 10))
+    );
 
     const min = Number(req.query.minPrice);
     const max = Number(req.query.maxPrice);
@@ -290,12 +346,17 @@ router.get("/fiterByPrice", async (req, res) => {
   }
 });
 
-// ---------------- FILTER BY RATING (>= rating, paginated) ----------------
-// /api/products/rating?rating=&catId=|subCatId=&location=&page=&perPage=
+// =====================================================
+// ============= FILTER BY RATING (PUBLIC) =============
+// =====================================================
+
 router.get("/rating", async (req, res) => {
   try {
     const page = Math.max(1, parseIntOr(req.query.page, 1));
-    const perPage = Math.min(100, Math.max(1, parseIntOr(req.query.perPage, 10)));
+    const perPage = Math.min(
+      100,
+      Math.max(1, parseIntOr(req.query.perPage, 10))
+    );
 
     const rating = Number(req.query.rating);
     const base = buildBaseQuery({
@@ -305,7 +366,6 @@ router.get("/rating", async (req, res) => {
     });
 
     if (!Number.isNaN(rating)) {
-      // usually you want >= selected rating
       base.rating = { $gte: rating };
     }
 
@@ -325,7 +385,10 @@ router.get("/rating", async (req, res) => {
   }
 });
 
-// ---------------- COUNT ----------------
+// =====================================================
+// ================== COUNT (PUBLIC) ===================
+// =====================================================
+
 router.get("/get/count", async (req, res) => {
   try {
     const count = await Product.countDocuments();
@@ -335,7 +398,10 @@ router.get("/get/count", async (req, res) => {
   }
 });
 
-// ---------------- FEATURED ----------------
+// =====================================================
+// ================= FEATURED (PUBLIC) =================
+// =====================================================
+
 router.get("/featured", async (req, res) => {
   try {
     const { location } = req.query;
@@ -357,7 +423,10 @@ router.get("/featured", async (req, res) => {
   }
 });
 
-// ---------------- RECENTLY VIEWED ----------------
+// =====================================================
+// ============ RECENTLY VIEWED (PUBLIC) ===============
+// =====================================================
+
 router.get("/recentlyViewd", async (req, res) => {
   try {
     const items = await RecentlyViewd.find(req.query).populate("category");
@@ -381,7 +450,10 @@ router.post("/recentlyViewd", async (req, res) => {
   }
 });
 
-// ---------------- GET PRODUCT BY ID ----------------
+// =====================================================
+// ============= GET PRODUCT BY ID (PUBLIC) ============
+// =====================================================
+
 router.get("/:id", async (req, res) => {
   try {
     const product = await Product.findById(req.params.id).populate("category");
@@ -423,11 +495,19 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-// ---------------- DELETE IMAGE ----------------
+// =====================================================
+// ============= DELETE IMAGE (ADMIN) ==================
+// =====================================================
+
 router.delete("/deleteImage", async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+
   try {
     const img = req.query.img;
-    if (!img) return res.status(400).json({ success: false, message: "img query required" });
+    if (!img)
+      return res
+        .status(400)
+        .json({ success: false, message: "img query required" });
 
     const filePath = path.join(UPLOAD_DIR, img);
     if (fs.existsSync(filePath)) {
@@ -440,12 +520,19 @@ router.delete("/deleteImage", async (req, res) => {
   }
 });
 
-// ---------------- DELETE PRODUCT ----------------
+// =====================================================
+// ============= DELETE PRODUCT (ADMIN) ================
+// =====================================================
+
 router.delete("/:id", async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+
   try {
     const product = await Product.findById(req.params.id);
     if (!product)
-      return res.status(404).json({ success: false, message: "Product not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Product not found" });
 
     for (const img of product.images || []) {
       const filePath = path.join(UPLOAD_DIR, img);
@@ -462,20 +549,30 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
-// ---------------- UPDATE PRODUCT ----------------
+// =====================================================
+// ============= UPDATE PRODUCT (ADMIN) ================
+// =====================================================
+
 router.put("/:id", async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+
   try {
-    const updated = await Product.findByIdAndUpdate(
-      req.params.id,
-      {
-        ...req.body,
-        ...(Array.isArray(req.body.images) ? { images: req.body.images } : {}),
-      },
-      { new: true }
-    );
+    const updateData = {
+      ...req.body,
+    };
+
+    if (Array.isArray(req.body.images)) {
+      updateData.images = req.body.images;
+    }
+
+    const updated = await Product.findByIdAndUpdate(req.params.id, updateData, {
+      new: true,
+    });
 
     if (!updated)
-      return res.status(404).json({ success: false, message: "Product not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Product not found" });
 
     res.json(updated);
   } catch (err) {

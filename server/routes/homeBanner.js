@@ -6,6 +6,27 @@ const multer = require("multer");
 
 const { HomeBanner } = require("../models/homeBanner");
 
+// ===== Auth helpers (req.auth is set by authJwt in index.js) =====
+function requireAuth(req, res) {
+  if (!req.auth) {
+    res.status(401).json({ error: true, msg: "Unauthorized" });
+    return false;
+  }
+  return true;
+}
+
+function requireAdmin(req, res) {
+  if (!req.auth) {
+    res.status(401).json({ error: true, msg: "Unauthorized" });
+    return false;
+  }
+  if (!req.auth.isAdmin) {
+    res.status(403).json({ error: true, msg: "Admin only" });
+    return false;
+  }
+  return true;
+}
+
 // -------- ENV paths --------
 const UPLOAD_DIR =
   process.env.HOME_BANNER_PATH ||
@@ -40,9 +61,13 @@ const upload = multer({
 const toImageUrls = (filenames = []) =>
   filenames.map((name) => `${BASE_URL}/uploads/homeBanner/${name}`);
 
+// =====================================================
+// =========== UPLOAD (ADMIN – returns filenames) ======
+// =====================================================
 
-// ---------- UPLOAD (returns array of filenames) ----------
 router.post("/upload", (req, res) => {
+  if (!requireAdmin(req, res)) return;
+
   upload.array("images", 10)(req, res, (err) => {
     if (err) {
       if (err.code === "LIMIT_FILE_SIZE") {
@@ -50,16 +75,22 @@ router.post("/upload", (req, res) => {
           .status(400)
           .json({ success: false, message: "Each file must be ≤ 5 MB" });
       }
-      return res.status(400).json({ success: false, message: err.message });
+      return res
+        .status(400)
+        .json({ success: false, message: err.message });
     }
     const filenames = (req.files || []).map((f) => f.filename);
     return res.status(200).json(filenames);
   });
 });
 
+// =====================================================
+// ================== CREATE (ADMIN) ===================
+// =====================================================
 
-// ---------- CREATE ----------
 router.post("/create", async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+
   try {
     const { images = [] } = req.body;
 
@@ -70,12 +101,15 @@ router.post("/create", async (req, res) => {
     const saved = await banner.save();
     res.status(201).json({ success: true, banner: saved });
   } catch (err) {
+    console.error("Create HomeBanner error:", err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
+// =====================================================
+// ================== GET ALL (PUBLIC) =================
+// =====================================================
 
-// ---------- GET ALL ----------
 router.get("/", async (req, res) => {
   try {
     const list = await HomeBanner.find();
@@ -89,13 +123,17 @@ router.get("/", async (req, res) => {
   }
 });
 
+// =====================================================
+// ================== GET ONE (PUBLIC) =================
+// =====================================================
 
-// ---------- GET ONE ----------
 router.get("/:id", async (req, res) => {
   try {
     const banner = await HomeBanner.findById(req.params.id);
     if (!banner)
-      return res.status(404).json({ success: false, message: "Not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Not found" });
 
     res.json({ ...banner.toObject(), images: toImageUrls(banner.images) });
   } catch (err) {
@@ -103,9 +141,13 @@ router.get("/:id", async (req, res) => {
   }
 });
 
+// =====================================================
+// ===== DELETE SINGLE IMAGE (ADMIN, by filename) ======
+// =====================================================
 
-// ---------- DELETE SINGLE IMAGE (by filename) ----------
 router.delete("/deleteImage", async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+
   try {
     const img = req.query.img;
     if (!img)
@@ -116,7 +158,9 @@ router.delete("/deleteImage", async (req, res) => {
     const filePath = path.join(UPLOAD_DIR, img);
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
-      return res.status(200).json({ success: true, message: "Image deleted" });
+      return res
+        .status(200)
+        .json({ success: true, message: "Image deleted" });
     }
     return res
       .status(404)
@@ -126,13 +170,19 @@ router.delete("/deleteImage", async (req, res) => {
   }
 });
 
+// =====================================================
+// ============= DELETE BANNER (ADMIN) =================
+// =====================================================
 
-// ---------- DELETE BANNER ----------
 router.delete("/:id", async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+
   try {
     const banner = await HomeBanner.findById(req.params.id);
     if (!banner)
-      return res.status(404).json({ success: false, message: "Not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Not found" });
 
     // delete files
     for (const img of banner.images) {
@@ -147,9 +197,13 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
+// =====================================================
+// ================== UPDATE (ADMIN) ===================
+// =====================================================
 
-// ---------- UPDATE ----------
 router.put("/:id", async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+
   try {
     const { images } = req.body;
     const updates = {

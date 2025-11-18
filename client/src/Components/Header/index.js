@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useContext } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Logo from "../../assets/images/logo.png";
 import Button from "@mui/material/Button";
@@ -7,7 +7,6 @@ import { FiUser } from "react-icons/fi";
 import { IoBagOutline } from "react-icons/io5";
 import SearchBox from "./SearchBox";
 import Navigation from "./Navigation";
-import { useContext } from "react";
 import { MyContext } from "../../App";
 
 import Avatar from "@mui/material/Avatar";
@@ -20,7 +19,6 @@ import { RiLogoutCircleRFill } from "react-icons/ri";
 import { FaUserAlt } from "react-icons/fa";
 import { IoMdMenu } from "react-icons/io";
 import { IoIosSearch } from "react-icons/io";
-import { FaAngleLeft } from "react-icons/fa6";
 import { FaAngleUp } from "react-icons/fa6";
 import UserAvatarImgComponent from "../userAvatarImg";
 import { IoHomeOutline } from "react-icons/io5";
@@ -28,7 +26,6 @@ import { IoMdHeartEmpty } from "react-icons/io";
 import { FaRegUser } from "react-icons/fa6";
 import { CiFilter } from "react-icons/ci";
 import { IoBagCheckOutline } from "react-icons/io5";
-
 
 const Header = () => {
   const [anchorEl, setAnchorEl] = useState(null);
@@ -49,35 +46,47 @@ const Header = () => {
     setAnchorEl(null);
   };
 
+  // 🔐 Hardened logout
   const logout = () => {
     setAnchorEl(null);
+
+    // Clear all auth/session-related localStorage
     localStorage.removeItem("user");
     localStorage.removeItem("token");
-    // localStorage.removeItem("location");
+    localStorage.removeItem("userEmail");
+    localStorage.removeItem("actionType");
+
+    // Reset global app state
     context.setIsLogin(false);
-    // window.location.href = "/signIn"
+    context.setUser({ name: "", email: "", userId: "" });
+    context.setCartData([]);
+
+    context.setAlertBox({
+      open: true,
+      error: false,
+      msg: "You have been logged out securely.",
+    });
+
     history("/signIn");
   };
 
   useEffect(() => {
-    window.addEventListener("scroll", () => {
-      let position = window.pageYOffset;
+    const onScroll = () => {
+      const position = window.pageYOffset;
+
       if (headerRef.current) {
-        if (position > 100) {
-          headerRef.current.classList.add("fixed");
-        } else {
-          headerRef.current.classList.remove("fixed");
-        }
+        if (position > 100) headerRef.current.classList.add("fixed");
+        else headerRef.current.classList.remove("fixed");
       }
 
       if (gotoTop.current) {
-        if (position > 500) {
-          gotoTop.current.classList.add("show");
-        } else {
-          gotoTop.current.classList.remove("show");
-        }
+        if (position > 500) gotoTop.current.classList.add("show");
+        else gotoTop.current.classList.remove("show");
       }
-    });
+    };
+
+    window.addEventListener("scroll", onScroll);
+    return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
   const openNav = () => {
@@ -138,13 +147,13 @@ const Header = () => {
                     </Button>
                   )}
 
-                  <Link to={"/"} className="logo">
+                  <Link to={"/"} className="logo" onClick={() => setIsOpenSearch(false)}>
                     <img src={Logo} alt="Logo" />
                   </Link>
 
                   {context.windowWidth < 992 && (
                     <div className="position-relative cartTab">
-                      <Link to="/cart" className="ml-auto">
+                      <Link to="/cart" className="ml-auto" onClick={() => setIsOpenSearch(false)}>
                         <Button className="circle">
                           <IoBagOutline />
                         </Button>
@@ -326,10 +335,13 @@ const Header = () => {
             </Link>
 
             {context.enableFilterTab === true && (
-              <Button className="circle" onClick={() => {
-                openFilter();
-                setIsOpenSearch(false)
-              }}>
+              <Button
+                className="circle"
+                onClick={() => {
+                  openFilter();
+                  setIsOpenSearch(false);
+                }}
+              >
                 <div className="d-flex align-items-center justify-content-center flex-column">
                   <CiFilter />
                   <span className="title">Filters</span>
@@ -337,14 +349,14 @@ const Header = () => {
               </Button>
             )}
 
-            <Button className="circle" onClick={openSearch }>
+            <Button className="circle" onClick={openSearch}>
               <div className="d-flex align-items-center justify-content-center flex-column">
                 <IoIosSearch />
                 <span className="title">Search</span>
               </div>
             </Button>
 
-            <Link to="/my-list"  onClick={() => setIsOpenSearch(false)}>
+            <Link to="/my-list" onClick={() => setIsOpenSearch(false)}>
               <Button className="circle">
                 <div className="d-flex align-items-center justify-content-center flex-column">
                   <IoMdHeartEmpty />
@@ -353,17 +365,16 @@ const Header = () => {
               </Button>
             </Link>
 
-            <Link to="/orders"  onClick={() => setIsOpenSearch(false)}>
-            <Button className="circle">
-              <div className="d-flex align-items-center justify-content-center flex-column">
-                <IoBagCheckOutline />
-                <span className="title">Orders</span>
-              </div>
-            </Button>
-          </Link>
-            
+            <Link to="/orders" onClick={() => setIsOpenSearch(false)}>
+              <Button className="circle">
+                <div className="d-flex align-items-center justify-content-center flex-column">
+                  <IoBagCheckOutline />
+                  <span className="title">Orders</span>
+                </div>
+              </Button>
+            </Link>
 
-            <Link to="/my-account"  onClick={() => setIsOpenSearch(false)}>
+            <Link to="/my-account" onClick={() => setIsOpenSearch(false)}>
               <Button className="circle">
                 <div className="d-flex align-items-center justify-content-center flex-column">
                   <FaRegUser />
