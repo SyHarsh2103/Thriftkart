@@ -47,6 +47,9 @@ import MyAccount from "./pages/MyAccount";
 import VerifyAccount from "./pages/OtpVerify";
 import ForgotPassword from "./pages/ForgotPassword";
 
+// 🔹 NEW: Admin return requests page
+import ReturnRequests from "./pages/ReturnRequests";
+
 const MyContext = createContext();
 
 function App() {
@@ -330,6 +333,14 @@ function App() {
                 element={<ProductSize />}
               />
               <Route path="/orders/" exact={true} element={<Orders />} />
+
+              {/* 🔹 NEW: Admin Return Requests list */}
+              <Route
+                path="/returns"
+                exact={true}
+                element={<ReturnRequests />}
+              />
+
               <Route
                 path="/homeBannerSlide/add"
                 exact={true}

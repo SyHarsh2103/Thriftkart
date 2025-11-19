@@ -72,6 +72,12 @@ const Orders = () => {
     setExpandedOrder(expandedOrder === orderId ? null : orderId);
   };
 
+  // 🔁 Go to Return Request page for this order
+  const handleReturnRequest = (orderId) => {
+    if (!orderId) return;
+    navigate(`/orders/${orderId}/return`);
+  };
+
   return (
     <section className="section">
       <div className="container">
@@ -84,19 +90,21 @@ const Orders = () => {
         {!loading &&
           orders?.map((order) => (
             <Card
-              key={order.id}
+              key={order._id || order.id}
               variant="outlined"
               className="mb-3 shadow-sm rounded"
             >
               <CardContent>
                 <Typography variant="h6" className="text-blue">
-                  Order #{order?.orderId || order?.id}
+                  Order #{order?.orderId || order?.id || order?._id}
                 </Typography>
                 <Typography variant="body2" color="textSecondary">
                   Placed on{" "}
                   {order?.date
                     ? order.date.split("T")[0]
-                    : new Date(order?.createdAt || "").toLocaleDateString()}
+                    : order?.createdAt
+                    ? new Date(order.createdAt).toLocaleDateString()
+                    : ""}
                 </Typography>
                 <Divider className="my-2" />
 
@@ -142,7 +150,9 @@ const Orders = () => {
                         className={`badge ${
                           order?.status === "pending"
                             ? "badge-danger"
-                            : "badge-success"
+                            : order?.status === "delivered"
+                            ? "badge-success"
+                            : "badge-warning"
                         }`}
                       >
                         {order?.status}
@@ -151,16 +161,31 @@ const Orders = () => {
                   </div>
                 </div>
 
-                {/* Expand Products */}
-                <Button
-                  size="small"
-                  variant="outlined"
-                  onClick={() => toggleExpand(order._id)}
-                >
-                  {expandedOrder === order._id
-                    ? "Hide Products"
-                    : "View Products"}
-                </Button>
+                {/* Actions: View Products + Request Return */}
+                <div className="mt-2">
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() => toggleExpand(order._id)}
+                  >
+                    {expandedOrder === order._id
+                      ? "Hide Products"
+                      : "View Products"}
+                  </Button>
+
+                  {/* 🔁 Show Return button only for delivered orders */}
+                  {order?.status === "delivered" && (
+                    <Button
+                      size="small"
+                      variant="contained"
+                      color="primary"
+                      style={{ marginLeft: 8 }}
+                      onClick={() => handleReturnRequest(order._id)}
+                    >
+                      Request Return
+                    </Button>
+                  )}
+                </div>
 
                 <Collapse in={expandedOrder === order._id}>
                   <Divider className="my-2" />

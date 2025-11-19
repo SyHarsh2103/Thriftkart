@@ -32,6 +32,10 @@ import PrivacyPolicy from "./Pages/PrivacyPolicy";
 import RefundPolicy from "./Pages/RefundPolicy";
 import Contact from "./Pages/Contact";
 
+// 🔁 NEW: Return Request pages
+import ReturnRequest from "./Pages/ReturnRequest";
+import MyReturns from "./Pages/MyReturns";
+
 const MyContext = createContext();
 
 /**
@@ -162,24 +166,34 @@ function App() {
   const addToCart = (data) => {
     if (isLogin) {
       setAddingInCart(true);
-      postData(`/api/cart/add`, data).then((res) => {
-        if (res.status !== false) {
-          setAlertBox({
-            open: true,
-            error: false,
-            msg: "Item is added in the cart",
-          });
-          setTimeout(() => setAddingInCart(false), 1000);
-          getCartData();
-        } else {
+      postData(`/api/cart/add`, data)
+        .then((res) => {
+          if (res.status !== false) {
+            setAlertBox({
+              open: true,
+              error: false,
+              msg: "Item is added in the cart",
+            });
+            setTimeout(() => setAddingInCart(false), 1000);
+            getCartData();
+          } else {
+            setAlertBox({
+              open: true,
+              error: true,
+              msg: res.msg,
+            });
+            setAddingInCart(false);
+          }
+        })
+        .catch((err) => {
+          console.error(err);
           setAlertBox({
             open: true,
             error: true,
-            msg: res.msg,
+            msg: err?.message || "Failed to add to cart",
           });
           setAddingInCart(false);
-        }
-      });
+        });
     } else {
       setAlertBox({
         open: true,
@@ -251,7 +265,8 @@ function App() {
 
       <Routes>
         <Route path="/" element={<Home />} />
-        {/* Force remount on path change */}
+
+        {/* Listing & product details */}
         <Route
           path="/products/category/:id"
           element={<Listing key={location.pathname} />}
@@ -277,7 +292,7 @@ function App() {
         <Route path="/contact" element={<Contact />} />
         <Route path="/search" element={<SearchPage />} />
 
-        {/* Routes that make sense even if not logged in (optional) */}
+        {/* Routes that make sense even if not logged in */}
         <Route path="/cart" element={<Cart />} />
 
         {/* Protected routes (login required) */}
@@ -318,6 +333,24 @@ function App() {
           element={
             <RequireAuth>
               <ChangePassword />
+            </RequireAuth>
+          }
+        />
+
+        {/* 🔁 NEW Return Request routes */}
+        <Route
+          path="/orders/:orderId/return"
+          element={
+            <RequireAuth>
+              <ReturnRequest />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/my-returns"
+          element={
+            <RequireAuth>
+              <MyReturns />
             </RequireAuth>
           }
         />

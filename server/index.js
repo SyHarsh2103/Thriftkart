@@ -1,3 +1,4 @@
+// server/index.js
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
@@ -6,7 +7,8 @@ const path = require("path");
 const axios = require("axios");
 const rateLimit = require("express-rate-limit");
 const helmet = require("helmet");
-const authJwt = require("./helper/jwt"); // 👈 our JWT middleware
+const authJwt = require("./helper/jwt"); // JWT middleware
+const returnRequestsRoutes = require("./routes/returnRequests");
 
 // Load env vars
 dotenv.config();
@@ -52,7 +54,7 @@ if (NODE_ENV === "development") {
 app.use(
   cors({
     origin: function (origin, callback) {
-      // Allow non-browser tools (like curl, Postman with no origin)
+      // Allow non-browser tools (curl, Postman etc. with no Origin header)
       if (!origin) return callback(null, true);
       if (allowedOrigins.includes(origin)) return callback(null, true);
       return callback(new Error("Not allowed by CORS"), false);
@@ -76,12 +78,12 @@ const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
 });
-app.use("/api/user/signin", authLimiter); // 👈 your signin route
+app.use("/api/user/signin", authLimiter);
 
 // ===== Body parsers =====
 app.use(
   express.json({
-    limit: "1mb", // adjust as needed
+    limit: "1mb",
   })
 );
 app.use(
@@ -91,11 +93,12 @@ app.use(
   })
 );
 
-// ===== JWT Auth middleware (must be AFTER body parsers, BEFORE routes) =====
+// ===== JWT Auth middleware (AFTER body parsers, BEFORE routes) =====
 app.use(authJwt());
 
 // ===== Static uploads =====
 const uploadsPath = process.env.UPLOADS_PATH || "/var/www/Thriftkart-uploads";
+// In dev you can also point this to path.join(__dirname, "uploads")
 app.use("/uploads", express.static(uploadsPath));
 
 // ===== Routes =====
@@ -116,8 +119,9 @@ app.use("/api/search", require("./routes/search.js"));
 app.use("/api/banners", require("./routes/banners.js"));
 app.use("/api/homeSideBanners", require("./routes/homeSideBanner.js"));
 app.use("/api/homeBottomBanners", require("./routes/homeBottomBanner.js"));
+app.use("/api/returns", returnRequestsRoutes); // ✅ Return Requests
 
-// ===== API Health Checker (protect or disable in prod) =====
+// ===== API Health Checker (dev-only) =====
 const apiEndpoints = [
   "/api/user",
   "/api/category",
@@ -136,6 +140,7 @@ const apiEndpoints = [
   "/api/banners",
   "/api/homeSideBanners",
   "/api/homeBottomBanners",
+  "/api/returns", // ✅ include returns in health check
 ];
 
 app.get("/check-apis", async (req, res) => {

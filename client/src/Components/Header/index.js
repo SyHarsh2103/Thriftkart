@@ -243,6 +243,7 @@ const Header = () => {
                               My Account
                             </MenuItem>
                           </Link>
+
                           <Link to="/orders">
                             <MenuItem onClick={handleClose}>
                               <ListItemIcon>
@@ -251,6 +252,17 @@ const Header = () => {
                               Orders
                             </MenuItem>
                           </Link>
+
+                          {/* 🔁 My Returns (desktop dropdown) */}
+                          <Link to="/my-returns">
+                            <MenuItem onClick={handleClose}>
+                              <ListItemIcon>
+                                <IoBagCheckOutline fontSize="small" />
+                              </ListItemIcon>
+                              My Returns
+                            </MenuItem>
+                          </Link>
+
                           <Link to="/my-list">
                             <MenuItem onClick={handleClose}>
                               <ListItemIcon>
@@ -259,6 +271,7 @@ const Header = () => {
                               My List
                             </MenuItem>
                           </Link>
+
                           <MenuItem onClick={logout}>
                             <ListItemIcon>
                               <RiLogoutCircleRFill fontSize="small" />
@@ -365,11 +378,22 @@ const Header = () => {
               </Button>
             </Link>
 
+            {/* 📦 Orders (mobile bottom menu) */}
             <Link to="/orders" onClick={() => setIsOpenSearch(false)}>
               <Button className="circle">
                 <div className="d-flex align-items-center justify-content-center flex-column">
-                  <IoBagCheckOutline />
+                  <FaClipboardCheck />
                   <span className="title">Orders</span>
+                </div>
+              </Button>
+            </Link>
+
+            {/* 🔁 My Returns (mobile bottom menu) */}
+            <Link to="/my-returns" onClick={() => setIsOpenSearch(false)}>
+              <Button className="circle">
+                <div className="d-flex align-items-center justify-content-center flex-column">
+                  <IoBagCheckOutline />
+                  <span className="title">Returns</span>
                 </div>
               </Button>
             </Link>

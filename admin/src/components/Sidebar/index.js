@@ -7,12 +7,11 @@ import { MdMessage } from "react-icons/md";
 import { FaBell } from "react-icons/fa6";
 import { IoIosSettings } from "react-icons/io";
 import { Link, NavLink } from "react-router-dom";
-import { useContext, useState } from "react";
+import { useContext, useState, useEffect } from "react";
 import { IoMdLogOut } from "react-icons/io";
 import { MyContext } from "../../App";
 import { FaClipboardCheck } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
-import { useEffect } from "react";
 import { BiSolidCategory } from "react-icons/bi";
 import { TbSlideshow } from "react-icons/tb";
 
@@ -22,18 +21,17 @@ const Sidebar = () => {
   const [isLogin, setIsLogin] = useState(false);
 
   const context = useContext(MyContext);
+  const history = useNavigate();
 
   const isOpenSubmenu = (index) => {
     setActiveTab(index);
-    if(activeTab===index){
+    if (activeTab === index) {
       setIsToggleSubmenu(!isToggleSubmenu);
-    }else{
+    } else {
       setIsToggleSubmenu(false);
       setIsToggleSubmenu(true);
     }
-   
   };
-  const history = useNavigate();
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -263,6 +261,7 @@ const Sidebar = () => {
             </div>
           </li>
 
+          {/* Orders */}
           <li>
             <NavLink exact activeClassName="is-active" to="/orders">
               <Button
@@ -275,10 +274,29 @@ const Sidebar = () => {
                 }}
               >
                 <span className="icon">
-                  {" "}
                   <FaClipboardCheck fontSize="small" />
                 </span>
                 Orders
+              </Button>
+            </NavLink>
+          </li>
+
+          {/* 🔹 NEW: Return Requests */}
+          <li>
+            <NavLink exact activeClassName="is-active" to="/returns">
+              <Button
+                className={`w-100 ${
+                  activeTab === 8 && isToggleSubmenu === true ? "active" : ""
+                }`}
+                onClick={() => {
+                  isOpenSubmenu(8);
+                  context.setIsOpenNav(false);
+                }}
+              >
+                <span className="icon">
+                  <FaCartArrowDown fontSize="small" />
+                </span>
+                Return Requests
               </Button>
             </NavLink>
           </li>
