@@ -8,6 +8,43 @@ const api = axios.create({
   timeout: 30000,
 });
 
+// ========== Helpers ==========
+
+function clearAuthStorage() {
+  try {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    localStorage.removeItem("userEmail");
+    localStorage.removeItem("actionType");
+  } catch (e) {
+    // ignore storage errors
+  }
+}
+
+function emitAuthLogout(reason = "unauthorized") {
+  try {
+    window.dispatchEvent(
+      new CustomEvent("thriftkart:auth-logout", {
+        detail: { reason },
+      })
+    );
+  } catch (e) {
+    // ignore
+  }
+}
+
+// Tiny helper for cancellation checks
+export function isCanceledError(e) {
+  return (
+    e?.isCanceled ||
+    e?.name === "AbortError" ||
+    e?.name === "CanceledError" ||
+    e?.code === "ERR_CANCELED"
+  );
+}
+
+// ========== Interceptors ==========
+
 // Attach token (if present) on every request
 api.interceptors.request.use(
   (config) => {
@@ -21,7 +58,7 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Tag cancellations + extract a friendly message
+// Response: tag cancellations, normalize message, and handle 401 auth errors
 api.interceptors.response.use(
   (res) => res,
   (err) => {
@@ -35,30 +72,53 @@ api.interceptors.response.use(
       return Promise.reject(err);
     }
 
+    const status = err?.response?.status;
+    const data = err?.response?.data || {};
+    const backendCode = data?.code;
+    const backendMsg =
+      data?.message || data?.msg || data?.error || err?.message || "";
+
+    // --- Central 401 handling (jwt expired / no token / invalid_token) ---
+    let authError = false;
+
+    if (status === 401) {
+      const messageText = String(backendMsg || "").toLowerCase();
+      const codeText = String(backendCode || "").toLowerCase();
+
+      if (
+        codeText === "invalid_token" ||
+        codeText === "credentials_required" ||
+        messageText.includes("jwt expired") ||
+        messageText.includes("no authorization token was found") ||
+        messageText.includes("unauthorized")
+      ) {
+        authError = true;
+
+        // Clear any stale auth data
+        clearAuthStorage();
+
+        // Let the rest of the app know
+        emitAuthLogout("token_expired_or_missing");
+      }
+    }
+
     // Store a normalized message on the error itself
     const msg =
-      err?.response?.data?.message ||
-      err?.response?.data?.msg || // your backend often uses `msg`
-      err?.response?.data?.error ||
+      backendMsg ||
       err?.message ||
-      "Request failed";
+      (authError
+        ? "Your session has expired. Please sign in again."
+        : "Request failed");
 
     err.normalizedMessage = msg;
+    err.authError = authError;
+
     return Promise.reject(err);
   }
 );
 
-// Tiny helper for cancellation checks
-export function isCanceledError(e) {
-  return (
-    e?.isCanceled ||
-    e?.name === "AbortError" ||
-    e?.name === "CanceledError" ||
-    e?.code === "ERR_CANCELED"
-  );
-}
-
 // ========== Unified error normalizer ==========
+
 function normalizeError(error) {
   const msg =
     error?.normalizedMessage ||
@@ -71,7 +131,8 @@ function normalizeError(error) {
     msg,
     status: error?.response?.status,
     data: error?.response?.data,
-    code: error?.code,
+    code: error?.code || error?.response?.data?.code,
+    authError: !!error?.authError,
   };
 }
 

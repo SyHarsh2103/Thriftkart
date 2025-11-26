@@ -63,6 +63,7 @@ const RequireAuth = ({ children }) => {
 
 function App() {
   const location = useLocation();
+  const navigate = useNavigate();
 
   const [countryList, setCountryList] = useState([]);
   const [selectedCountry, setselectedCountry] = useState("");
@@ -75,7 +76,7 @@ function App() {
   const [subCategoryData, setsubCategoryData] = useState([]);
   const [addingInCart, setAddingInCart] = useState(false);
 
-  const [cartData, setCartData] = useState();
+  const [cartData, setCartData] = useState([]);
   const [searchData, setSearchData] = useState([]);
   const [isOpenNav, setIsOpenNav] = useState(false);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
@@ -91,22 +92,93 @@ function App() {
 
   const [user, setUser] = useState({ name: "", email: "", userId: "" });
 
-  useEffect(() => {
-    const user = JSON.parse(localStorage.getItem("user"));
-    if (user?.userId) {
-      fetchDataFromApi(`/api/cart?userId=${user?.userId}`).then((res) => {
-        setCartData(res);
-      });
+  const getStoredUser = () => {
+    try {
+      return JSON.parse(localStorage.getItem("user"));
+    } catch {
+      return null;
     }
-  }, [isLogin]);
+  };
 
+  // ---------- Initial auth + user bootstrap ----------
   useEffect(() => {
-    getCountry("https://countriesnow.space/api/v0.1/countries/");
+    const token = localStorage.getItem("token");
+    const userData = getStoredUser();
+
+    if (token && userData?.userId) {
+      setIsLogin(true);
+      setUser(userData);
+    } else {
+      setIsLogin(false);
+      setUser({ name: "", email: "", userId: "" });
+      setCartData([]);
+    }
+  }, []);
+
+  // ---------- Global listener for auth logout from api.js ----------
+  useEffect(() => {
+    function onAuthLogout() {
+      setIsLogin(false);
+      setUser({ name: "", email: "", userId: "" });
+      setCartData([]);
+      setAlertBox({
+        open: true,
+        error: true,
+        msg: "Your session has expired. Please sign in again.",
+      });
+      navigate("/signIn");
+    }
+
+    window.addEventListener("thriftkart:auth-logout", onAuthLogout);
+    return () =>
+      window.removeEventListener("thriftkart:auth-logout", onAuthLogout);
+  }, [navigate]);
+
+  // ---------- Cart: load when logged in ----------
+  useEffect(() => {
+    if (!isLogin) {
+      setCartData([]);
+      return;
+    }
+
+    const userData = getStoredUser();
+    const userId = userData?.userId || user?.userId;
+    if (!userId) return;
+
+    fetchDataFromApi(`/api/cart?userId=${userId}`).then((res) => {
+      // handle normalized error or success
+      if (res && res.success === false) {
+        // 401 or other failure
+        setCartData([]);
+        return;
+      }
+      setCartData(Array.isArray(res) ? res : res?.data || res || []);
+    });
+  }, [isLogin, user?.userId]);
+
+  // ---------- Countries + categories + window resize ----------
+  useEffect(() => {
+    // 🔹 Only call external country API in non-localhost builds to avoid CORS noise
+    const host = window.location.hostname;
+    if (host !== "localhost" && host !== "127.0.0.1") {
+      getCountry("https://countriesnow.space/api/v0.1/countries/");
+    } else {
+      // In dev, skip this external API if it causes CORS issues
+      setCountryList([]);
+    }
 
     fetchDataFromApi("/api/category").then((res) => {
-      setCategoryData(res.categoryList);
+      if (res && res.success === false) {
+        setCategoryData([]);
+        setsubCategoryData([]);
+        return;
+      }
+
+      const list = res?.categoryList || [];
+      setCategoryData(list);
+
       const subCatArr = [];
-      res.categoryList?.forEach((cat) => {
+      list?.forEach((cat) => {
         if (cat?.children?.length) {
           cat.children.forEach((subCat) => subCatArr.push(subCat));
         }
@@ -125,42 +197,53 @@ function App() {
 
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const getCartData = () => {
-    const user = JSON.parse(localStorage.getItem("user"));
-    if (!user?.userId) return;
-    fetchDataFromApi(`/api/cart?userId=${user?.userId}`).then((res) =>
-      setCartData(res)
-    );
-  };
+    const userData = getStoredUser();
+    if (!userData?.userId) return;
 
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (token) {
-      setIsLogin(true);
-      const userData = JSON.parse(localStorage.getItem("user"));
-      setUser(userData);
-    } else {
-      setIsLogin(false);
-    }
-  }, [isLogin]);
+    fetchDataFromApi(`/api/cart?userId=${userData.userId}`).then((res) => {
+      if (res && res.success === false) {
+        setCartData([]);
+        return;
+      }
+      setCartData(Array.isArray(res) ? res : res?.data || res || []);
+    });
+  };
 
   const openProductDetailsModal = (id, status) => {
     fetchDataFromApi(`/api/products/${id}`).then((res) => {
+      if (res && res.success === false) {
+        setAlertBox({
+          open: true,
+          error: true,
+          msg: res.msg || "Failed to load product details",
+        });
+        return;
+      }
       setProductData(res);
       setisOpenProductModal(status);
     });
   };
 
   const getCountry = async (url) => {
-    const responsive = await axios.get(url);
-    setCountryList(responsive.data.data);
+    try {
+      const responsive = await axios.get(url);
+      const list = responsive?.data?.data || [];
+      setCountryList(list);
+    } catch (err) {
+      console.error("Country API error:", err?.message || err);
+      // Fallback – app should still work even if countries API fails
+      setCountryList([]);
+    }
   };
 
   const handleClose = (_, reason) => {
     if (reason === "clickaway") return;
-    setAlertBox({ open: false });
+    // use functional form to avoid stale state
+    setAlertBox((prev) => ({ ...prev, open: false, msg: "" }));
   };
 
   const addToCart = (data) => {
@@ -168,22 +251,23 @@ function App() {
       setAddingInCart(true);
       postData(`/api/cart/add`, data)
         .then((res) => {
-          if (res.status !== false) {
-            setAlertBox({
-              open: true,
-              error: false,
-              msg: "Item is added in the cart",
-            });
-            setTimeout(() => setAddingInCart(false), 1000);
-            getCartData();
-          } else {
+          if (res && res.success === false) {
             setAlertBox({
               open: true,
               error: true,
-              msg: res.msg,
+              msg: res.msg || "Failed to add to cart",
             });
             setAddingInCart(false);
+            return;
           }
+
+          setAlertBox({
+            open: true,
+            error: false,
+            msg: "Item is added in the cart",
+          });
+          setTimeout(() => setAddingInCart(false), 1000);
+          getCartData();
         })
         .catch((err) => {
           console.error(err);

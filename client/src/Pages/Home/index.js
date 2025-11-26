@@ -23,19 +23,19 @@ const Home = () => {
   const [featuredProducts, setFeaturedProducts] = useState([]); // array
   const [productsData, setProductsData] = useState(null); // null until loaded
   const [selectedCat, setselectedCat] = useState();
-  const [filterData, setFilterData] = useState([]);
+  const [filterData, setFilterData] = useState([]); // array
   const [homeSlides, setHomeSlides] = useState([]);
 
   const [value, setValue] = useState(0);
 
   const [isLoading, setIsLoading] = useState(false);
   const [bannerList, setBannerList] = useState([]);
-  const [randomCatProducts, setRandomCatProducts] = useState(null); // null until loaded
+  const [randomCatProducts, setRandomCatProducts] = useState(null); // { catName, catId, products: [] }
   const [homeSideBanners, setHomeSideBanners] = useState([]);
   const [homeBottomBanners, setHomeBottomBanners] = useState([]);
 
   const context = useContext(MyContext);
-  const filterSlider = useRef();
+  const filterSlider = useRef(null);
 
   const handleChange = (event, newValue) => {
     setValue(newValue);
@@ -45,7 +45,7 @@ const Home = () => {
     setselectedCat(cat);
   };
 
-  // Initial load: banners + products (no location dependency)
+  // -------- Initial load: banners + products (no location dependency) --------
   useEffect(() => {
     window.scrollTo(0, 0);
     context.setisHeaderFooterShow(true);
@@ -54,77 +54,171 @@ const Home = () => {
 
     // Home banner
     fetchDataFromApi("/api/homeBanner").then((res) => {
-      setHomeSlides(res);
+      if (res && res.success === false) {
+        setHomeSlides([]);
+        return;
+      }
+      const list = Array.isArray(res) ? res : res?.data || [];
+      setHomeSlides(list);
     });
 
     // Generic banners
     fetchDataFromApi("/api/banners").then((res) => {
-      setBannerList(res);
+      if (res && res.success === false) {
+        setBannerList([]);
+        return;
+      }
+      const list = Array.isArray(res) ? res : res?.data || [];
+      setBannerList(list);
     });
 
+    // Side banners
     fetchDataFromApi("/api/homeSideBanners").then((res) => {
-      setHomeSideBanners(res);
+      if (res && res.success === false) {
+        setHomeSideBanners([]);
+        return;
+      }
+      const list = Array.isArray(res) ? res : res?.data || [];
+      setHomeSideBanners(list);
     });
 
+    // Bottom banners
     fetchDataFromApi("/api/homeBottomBanners").then((res) => {
-      setHomeBottomBanners(res);
+      if (res && res.success === false) {
+        setHomeBottomBanners([]);
+        return;
+      }
+      const list = Array.isArray(res) ? res : res?.data || [];
+      setHomeBottomBanners(list);
     });
 
     // New Products (no location)
     setIsLoading(true);
     fetchDataFromApi(`/api/products?page=1&perPage=16`)
       .then((res) => {
-        setProductsData(res);
+        if (res && res.success === false) {
+          setProductsData({ products: [] });
+          return;
+        }
+        // backend was earlier returning { products: [...] }
+        const products = Array.isArray(res?.products)
+          ? res.products
+          : Array.isArray(res)
+          ? res
+          : [];
+        setProductsData({ products });
       })
       .finally(() => setIsLoading(false));
 
     // Featured products (no location)
     fetchDataFromApi(`/api/products/featured`).then((res) => {
-      setFeaturedProducts(Array.isArray(res) ? res : []);
+      if (res && res.success === false) {
+        setFeaturedProducts([]);
+        return;
+      }
+      const list = Array.isArray(res)
+        ? res
+        : Array.isArray(res?.products)
+        ? res.products
+        : [];
+      setFeaturedProducts(list);
     });
-  }, []);
+  }, [context]);
 
-  // Set default category + random category products
+  // -------- Set default category + random category products --------
   useEffect(() => {
-    if (context.categoryData[0]) {
-      setselectedCat(context.categoryData[0].name);
+    const cats = Array.isArray(context.categoryData)
+      ? context.categoryData
+      : [];
+
+    if (cats[0]) {
+      setselectedCat(cats[0].name);
     }
 
-    if (context.categoryData?.length > 0) {
-      const randomIndex = Math.floor(
-        Math.random() * context.categoryData.length
-      );
+    if (cats.length > 0) {
+      const randomIndex = Math.floor(Math.random() * cats.length);
+      const randomCat = cats[randomIndex];
 
-      fetchDataFromApi(
-        `/api/products/catId?catId=${context.categoryData[randomIndex]?._id}`
-      ).then((res) => {
-        setRandomCatProducts({
-          catName: context.categoryData[randomIndex]?.name,
-          catId: context.categoryData[randomIndex]?._id,
-          products: res?.products || [],
-        });
-      });
+      if (randomCat?._id) {
+        fetchDataFromApi(`/api/products/catId?catId=${randomCat._id}`).then(
+          (res) => {
+            if (res && res.success === false) {
+              setRandomCatProducts({
+                catName: randomCat.name,
+                catId: randomCat._id,
+                products: [],
+              });
+              return;
+            }
+
+            const products = Array.isArray(res?.products)
+              ? res.products
+              : Array.isArray(res)
+              ? res
+              : [];
+            setRandomCatProducts({
+              catName: randomCat.name,
+              catId: randomCat._id,
+              products,
+            });
+          }
+        );
+      }
     }
   }, [context.categoryData]);
 
-  // Filtered products (Popular Products tabs) – no location
+  // -------- Filtered products (Popular Products tabs) – no location --------
   useEffect(() => {
-    if (selectedCat) {
-      setIsLoading(true);
-      fetchDataFromApi(`/api/products/catName?catName=${selectedCat}`).then(
-        (res) => {
-          setFilterData(res?.products || []);
-          setIsLoading(false);
-          filterSlider?.current?.swiper?.slideTo(0);
+    if (!selectedCat) return;
+
+    setIsLoading(true);
+    fetchDataFromApi(`/api/products/catName?catName=${selectedCat}`)
+      .then((res) => {
+        if (res && res.success === false) {
+          setFilterData([]);
+          return;
         }
-      );
-    }
+
+        const list = Array.isArray(res?.products)
+          ? res.products
+          : Array.isArray(res)
+          ? res
+          : [];
+        setFilterData(list);
+
+        // Safely reset swiper to first slide
+        if (filterSlider.current && filterSlider.current.swiper) {
+          try {
+            filterSlider.current.swiper.slideTo(0);
+          } catch (e) {
+            console.warn("Swiper slideTo error:", e);
+          }
+        }
+      })
+      .finally(() => setIsLoading(false));
   }, [selectedCat]);
+
+  const safeHomeSlides = Array.isArray(homeSlides) ? homeSlides : [];
+  const safeSideBanners = Array.isArray(homeSideBanners)
+    ? homeSideBanners
+    : [];
+  const safeBottomBanners = Array.isArray(homeBottomBanners)
+    ? homeBottomBanners
+    : [];
+  const safeBannerList = Array.isArray(bannerList) ? bannerList : [];
+  const safeFeatured = Array.isArray(featuredProducts) ? featuredProducts : [];
+  const safeFilterData = Array.isArray(filterData) ? filterData : [];
+  const safeRandomProducts = Array.isArray(randomCatProducts?.products)
+    ? randomCatProducts.products
+    : [];
+  const safeNewProducts = Array.isArray(productsData?.products)
+    ? productsData.products
+    : [];
 
   return (
     <>
-      {homeSlides?.length !== 0 ? (
-        <HomeBanner data={homeSlides} />
+      {safeHomeSlides.length !== 0 ? (
+        <HomeBanner data={safeHomeSlides} />
       ) : (
         <div className="container mt-3">
           <div className="homeBannerSection">
@@ -133,9 +227,10 @@ const Home = () => {
         </div>
       )}
 
-      {context.categoryData?.length > 0 && (
-        <HomeCat catData={context.categoryData} />
-      )}
+      {Array.isArray(context.categoryData) &&
+        context.categoryData.length > 0 && (
+          <HomeCat catData={context.categoryData} />
+        )}
 
       <section className="homeProducts pb-0">
         <div className="container">
@@ -143,7 +238,7 @@ const Home = () => {
             {/* ---- Side Banners ---- */}
             <div className="col-md-3">
               <div className="sticky">
-                {homeSideBanners?.map((item, index) => (
+                {safeSideBanners.map((item, index) => (
                   <div className="banner mb-3" key={index}>
                     {item?.subCatId ? (
                       <Link
@@ -151,7 +246,7 @@ const Home = () => {
                         className="box"
                       >
                         <img
-                          src={item?.images[0]}
+                          src={item?.images?.[0]}
                           className="w-100 transition"
                           alt="banner img"
                         />
@@ -162,7 +257,7 @@ const Home = () => {
                         className="box"
                       >
                         <img
-                          src={item?.images[0]}
+                          src={item?.images?.[0]}
                           className="cursor w-100 transition"
                           alt="banner img"
                         />
@@ -195,14 +290,15 @@ const Home = () => {
                     scrollButtons="auto"
                     className="filterTabs"
                   >
-                    {context.categoryData?.map((item, index) => (
-                      <Tab
-                        key={index}
-                        className="item"
-                        label={item.name}
-                        onClick={() => selectCat(item.name)}
-                      />
-                    ))}
+                    {Array.isArray(context.categoryData) &&
+                      context.categoryData.map((item, index) => (
+                        <Tab
+                          key={index}
+                          className="item"
+                          label={item.name}
+                          onClick={() => selectCat(item.name)}
+                        />
+                      ))}
                   </Tabs>
                 </div>
               </div>
@@ -222,7 +318,7 @@ const Home = () => {
                     modules={[Navigation]}
                     className="mySwiper"
                   >
-                    {filterData?.map((item, index) => (
+                    {safeFilterData.map((item, index) => (
                       <SwiperSlide key={index}>
                         <ProductItem item={item} />
                       </SwiperSlide>
@@ -233,7 +329,7 @@ const Home = () => {
                   </Swiper>
                 ) : (
                   <div className="productScroller">
-                    {filterData?.map((item, index) => (
+                    {safeFilterData.map((item, index) => (
                       <ProductItem item={item} key={index} />
                     ))}
                   </div>
@@ -259,13 +355,15 @@ const Home = () => {
                 </div>
               ) : (
                 <div className="product_row productRow2 w-100 mt-4 d-flex productScroller ml-0 mr-0">
-                  {productsData?.products?.map((item, index) => (
+                  {safeNewProducts.map((item, index) => (
                     <ProductItem key={index} item={item} />
                   ))}
                 </div>
               )}
 
-              {bannerList?.length > 0 && <Banners data={bannerList} col={3} />}
+              {safeBannerList.length > 0 && (
+                <Banners data={safeBannerList} col={3} />
+              )}
             </div>
           </div>
 
@@ -279,7 +377,7 @@ const Home = () => {
             </div>
           </div>
 
-          {featuredProducts?.length > 0 && (
+          {safeFeatured.length > 0 && (
             <div className="product_row w-100 mt-2">
               {context.windowWidth > 992 ? (
                 <Swiper
@@ -290,7 +388,7 @@ const Home = () => {
                   modules={[Navigation]}
                   className="mySwiper"
                 >
-                  {featuredProducts?.map((item, index) => (
+                  {safeFeatured.map((item, index) => (
                     <SwiperSlide key={index}>
                       <ProductItem item={item} />
                     </SwiperSlide>
@@ -301,7 +399,7 @@ const Home = () => {
                 </Swiper>
               ) : (
                 <div className="productScroller">
-                  {featuredProducts?.map((item, index) => (
+                  {safeFeatured.map((item, index) => (
                     <ProductItem item={item} key={index} />
                   ))}
                 </div>
@@ -309,15 +407,15 @@ const Home = () => {
             </div>
           )}
 
-          {homeBottomBanners?.length > 0 && (
-            <Banners data={homeBottomBanners} col={3} />
+          {safeBottomBanners.length > 0 && (
+            <Banners data={safeBottomBanners} col={3} />
           )}
         </div>
       </section>
 
       {/* Random Category Products */}
       <div className="container">
-        {randomCatProducts?.products?.length > 0 && (
+        {safeRandomProducts.length > 0 && (
           <>
             <div className="d-flex align-items-center mt-1 pr-3">
               <div className="info">
@@ -347,7 +445,7 @@ const Home = () => {
                   modules={[Navigation]}
                   className="mySwiper"
                 >
-                  {randomCatProducts?.products?.map((item, index) => (
+                  {safeRandomProducts.map((item, index) => (
                     <SwiperSlide key={index}>
                       <ProductItem item={item} />
                     </SwiperSlide>
@@ -358,7 +456,7 @@ const Home = () => {
                 </Swiper>
               ) : (
                 <div className="productScroller">
-                  {randomCatProducts?.products?.map((item, index) => (
+                  {safeRandomProducts.map((item, index) => (
                     <ProductItem item={item} key={index} />
                   ))}
                 </div>

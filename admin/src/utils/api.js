@@ -49,31 +49,36 @@ api.interceptors.response.use(
     enriched.data = error?.response?.data;
     enriched.code = error?.code;
 
-    // 🔐 Global handling for unauthorized / admin-only cases
+    // 🔐 Global handling for ANY unauthorized / forbidden response
     if (enriched.status === 401 || enriched.status === 403) {
-      const msgLower = (enriched.message || "").toLowerCase();
-
-      if (
-        msgLower.includes("admin only") ||
-        msgLower.includes("unauthorized") ||
-        msgLower.includes("jwt") // e.g. invalid token
-      ) {
-        try {
-          localStorage.removeItem("token");
-          localStorage.removeItem("user");
-        } catch (e) {
-          console.error("Failed to clear auth storage", e);
-        }
-
-        // Redirect to admin login
-        window.location.href = "/login";
-
-        // ✅ Resolve with safe data so UI doesn't crash
-        return Promise.resolve({ data: null });
+      try {
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+      } catch (e) {
+        console.error("Failed to clear auth storage", e);
       }
+
+      // Optional: fire a custom event if you ever want to listen to it in App.js
+      try {
+        window.dispatchEvent(
+          new CustomEvent("thriftkart:admin-logout", {
+            detail: { reason: enriched.message },
+          })
+        );
+      } catch (e) {
+        // ignore
+      }
+
+      // Redirect to admin login (avoid looping if already there)
+      if (window.location.pathname !== "/login") {
+        window.location.href = "/login";
+      }
+
+      // ✅ Resolve with safe axios-like object so `fetchDataFromApi` returns `null`
+      return Promise.resolve({ data: null });
     }
 
-    // For all other errors, let caller decide
+    // For all other errors, let caller decide (you can catch in components)
     return Promise.reject(enriched);
   }
 );

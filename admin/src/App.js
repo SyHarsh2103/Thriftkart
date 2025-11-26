@@ -97,6 +97,13 @@ function App() {
     }
   }, [theme]);
 
+  // ---------- Window resize (optional, used in context) ----------
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
   // ---------- Admin session init (IMPORTANT) ----------
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -131,16 +138,45 @@ function App() {
     }
   }, []);
 
-  // ---------- Country list ----------
+  // ---------- Listen for global admin logout event from api.js ----------
   useEffect(() => {
-    getCountry("https://countriesnow.space/api/v0.1/countries/");
+    const onAdminLogout = (e) => {
+      // Clear local state
+      setIsLogin(false);
+      setUser({ name: "", email: "", userId: "", isAdmin: false });
+
+      setAlertBox({
+        open: true,
+        error: true,
+        msg:
+          e?.detail?.reason ||
+          "Your admin session has expired. Please login again.",
+      });
+    };
+
+    window.addEventListener("thriftkart:admin-logout", onAdminLogout);
+    return () => {
+      window.removeEventListener("thriftkart:admin-logout", onAdminLogout);
+    };
+  }, []);
+
+  // ---------- Country list (skip external API on localhost to avoid CORS noise) ----------
+  useEffect(() => {
+    const host = window.location.hostname;
+    if (host !== "localhost" && host !== "127.0.0.1") {
+      getCountry("https://countriesnow.space/api/v0.1/countries/");
+    } else {
+      // In dev/admin localhost, we don't really need this → keep empty
+      setCountryList([]);
+    }
   }, []);
 
   const countryListArr = [];
 
   const getCountry = async (url) => {
-    await axios.get(url).then((res) => {
-      if (res !== null) {
+    try {
+      const res = await axios.get(url);
+      if (res && res.data && Array.isArray(res.data.data)) {
         res.data.data.forEach((item) => {
           countryListArr.push({
             value: item?.iso2,
@@ -150,7 +186,10 @@ function App() {
 
         setCountryList(countryListArr);
       }
-    });
+    } catch (err) {
+      console.error("Admin country API error:", err?.message || err);
+      setCountryList([]);
+    }
   };
 
   const handleClose = (event, reason) => {
@@ -165,27 +204,42 @@ function App() {
   }, []);
 
   const fetchCategory = () => {
-    fetchDataFromApi("/api/category").then((res) => {
-      // if API failed, res may be { success:false, msg:... }
-      if (Array.isArray(res)) {
-        setCatData(res);
-      } else {
+    fetchDataFromApi("/api/category")
+      .then((res) => {
+        // backend often sends { categoryList: [...] }
+        if (res && Array.isArray(res.categoryList)) {
+          setCatData(res.categoryList);
+        } else if (Array.isArray(res)) {
+          // fallback if API returns a direct array
+          setCatData(res);
+        } else {
+          setCatData([]);
+          console.error("Failed to load categories", res);
+        }
+      })
+      .catch((err) => {
+        console.error("Admin category fetch error:", err);
         setCatData([]);
-        console.error("Failed to load categories", res);
-      }
-      setProgress(100);
-    });
+      })
+      .finally(() => setProgress(100));
   };
 
   const fetchSubCategory = () => {
-    fetchDataFromApi("/api/subCat").then((res) => {
-      // backend sends { subCategoryList: [...] }
-      if (res && Array.isArray(res.subCategoryList)) {
-        setSubCatData(res.subCategoryList);
-      } else {
+    fetchDataFromApi("/api/subCat")
+      .then((res) => {
+        // backend sends { subCategoryList: [...] }
+        if (res && Array.isArray(res.subCategoryList)) {
+          setSubCatData(res.subCategoryList);
+        } else if (Array.isArray(res)) {
+          setSubCatData(res);
+        } else {
+          setSubCatData([]);
+        }
+      })
+      .catch((err) => {
+        console.error("Admin subCategory fetch error:", err);
         setSubCatData([]);
-      }
-    });
+      });
   };
 
   const openNav = () => {
