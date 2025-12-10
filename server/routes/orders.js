@@ -1,8 +1,14 @@
+// server/routes/orders.js
 const express = require("express");
 const { Orders } = require("../models/orders");
 const Razorpay = require("razorpay");
 const crypto = require("crypto");
 const rateLimit = require("express-rate-limit");
+
+// ✅ Shiprocket helper (from server/utils/shiprocket.js)
+const {
+  createShiprocketOrderFromOrder,
+} = require("../utils/shiprocket");
 
 const router = express.Router();
 
@@ -47,7 +53,7 @@ const razorpay = new Razorpay({
 // ===== Rate limiters for payment endpoints =====
 const razorpayLimiter = rateLimit({
   windowMs: 5 * 60 * 1000, // 5 minutes
-  max: 50,                  // 50 requests per IP per 5 min
+  max: 50, // 50 requests per IP per 5 min
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -198,6 +204,60 @@ router.get(`/get/count`, async (req, res) => {
 });
 
 // =====================================================
+// ================ SHIPROCKET SYNC HELPER =============
+// =====================================================
+
+// helper to safely sync with Shiprocket after saving the order
+async function syncWithShiprocket(savedOrder) {
+  try {
+    // If already synced once, skip
+    if (savedOrder.shiprocket && savedOrder.shiprocket.enabled) {
+      console.log(
+        `ℹ️ Shiprocket already synced for order ${savedOrder._id}, skipping`
+      );
+      return;
+    }
+
+    const sr = await createShiprocketOrderFromOrder(savedOrder);
+
+    if (sr && typeof sr === "object") {
+      savedOrder.shiprocket = {
+        enabled: true,
+        sr_order_id: sr.order_id ?? sr.orderId ?? null,
+        shipment_id: Array.isArray(sr.shipment_id)
+          ? sr.shipment_id[0]
+          : sr.shipment_id ?? null,
+        status: sr.status || sr.current_status || "created",
+        awb_code: sr.awb_code || "",
+        courier:
+          (sr.courier_company && sr.courier_company.name) ||
+          sr.courier_name ||
+          "",
+        label_url: sr.label_url || "",
+        manifest_url: sr.manifest_url || "",
+        tracking_url:
+          sr.tracking_url ||
+          (sr.awb_code ? `https://shiprocket.co/tracking/${sr.awb_code}` : ""),
+        raw: sr,
+      };
+
+      await savedOrder.save();
+    }
+
+    console.log(
+      `✅ Shiprocket sync success for order ${savedOrder._id}`,
+      savedOrder.shiprocket
+    );
+  } catch (err) {
+    console.error(
+      `Shiprocket sync failed for order ${savedOrder._id}:`,
+      err?.response?.data || err.message || err
+    );
+    // ❗ Do NOT throw here – we don't want to fail checkout
+  }
+}
+
+// =====================================================
 // ================ ORDER CREATE =======================
 // =====================================================
 
@@ -210,6 +270,9 @@ router.post("/create", async (req, res) => {
       name,
       phoneNumber,
       address,
+      city,
+      state,
+      country,
       pincode,
       amount,
       paymentId,
@@ -237,10 +300,13 @@ router.post("/create", async (req, res) => {
       name,
       phoneNumber,
       address,
+      city: city || undefined,
+      state: state || undefined,
+      country: country || undefined,
       pincode,
       amount,
       paymentId,
-      paymentType,
+      paymentType: paymentType || "ONLINE",
       email,
       userid: req.auth.id, // 👈 always from token, not body
       products,
@@ -256,6 +322,9 @@ router.post("/create", async (req, res) => {
         amount: saved.amount,
       });
     }
+
+    // 🔹 Fire-and-forget Shiprocket sync (Prepaid)
+    syncWithShiprocket(saved);
 
     return res.status(201).json(saved);
   } catch (error) {
@@ -275,6 +344,9 @@ router.post("/cod/create", async (req, res) => {
       name,
       phoneNumber,
       address,
+      city,
+      state,
+      country,
       pincode,
       amount,
       paymentType,
@@ -301,6 +373,9 @@ router.post("/cod/create", async (req, res) => {
       name,
       phoneNumber,
       address,
+      city: city || undefined,
+      state: state || undefined,
+      country: country || undefined,
       pincode,
       amount,
       paymentId: null,
@@ -320,6 +395,9 @@ router.post("/cod/create", async (req, res) => {
         amount: saved.amount,
       });
     }
+
+    // 🔹 Fire-and-forget Shiprocket sync (COD)
+    syncWithShiprocket(saved);
 
     return res.status(201).json(saved);
   } catch (error) {
@@ -365,7 +443,6 @@ router.put("/:id", async (req, res) => {
   if (!requireAdmin(req, res)) return;
 
   try {
-    // Allow only limited fields to change (status, paymentId, paymentType)
     const update = {
       status: req.body.status,
     };
@@ -377,15 +454,27 @@ router.put("/:id", async (req, res) => {
       update.paymentType = req.body.paymentType;
     }
 
-    const order = await Orders.findByIdAndUpdate(req.params.id, update, {
-      new: true,
-    });
-
-    if (!order) {
+    // get old order to decide if we need to sync with Shiprocket here
+    const prev = await Orders.findById(req.params.id);
+    if (!prev) {
       return res.status(404).json({
         message: "Order cannot be updated – not found",
         success: false,
       });
+    }
+
+    const order = await Orders.findByIdAndUpdate(req.params.id, update, {
+      new: true,
+    });
+
+    // OPTIONAL logic: if you only want Shiprocket order after confirm
+    // but we already sync on create(), so here we just ensure not to double-create:
+    if (
+      prev.status !== "confirm" &&
+      order.status === "confirm" &&
+      !(order.shiprocket && order.shiprocket.enabled)
+    ) {
+      syncWithShiprocket(order);
     }
 
     return res.send(order);
@@ -402,100 +491,86 @@ router.put("/:id", async (req, res) => {
 // =====================================================
 
 // Step 1: Create Razorpay Order
-router.post(
-  "/create-razorpay-order",
-  razorpayLimiter,
-  async (req, res) => {
-    if (!requireAuth(req, res)) return;
+router.post("/create-razorpay-order", razorpayLimiter, async (req, res) => {
+  if (!requireAuth(req, res)) return;
 
-    if (!HAS_RAZORPAY_CONFIG) {
-      return res.status(500).json({
-        success: false,
-        error: "Razorpay is not configured on server",
-      });
-    }
-
-    try {
-      const { amount, currency } = req.body;
-
-      const amt = Number(amount);
-      if (!amt || Number.isNaN(amt) || amt <= 0) {
-        return res
-          .status(400)
-          .json({ success: false, error: "Invalid amount" });
-      }
-
-      const options = {
-        amount: Math.round(amt * 100), // paise
-        currency: currency || "INR",
-        receipt: "receipt_" + Date.now(),
-        notes: {
-          userId: req.auth.id,
-        },
-      };
-
-      const order = await razorpay.orders.create(options);
-      return res.json(order);
-    } catch (error) {
-      console.error("Error creating Razorpay order:", error);
-      return res.status(500).json({ success: false });
-    }
+  if (!HAS_RAZORPAY_CONFIG) {
+    return res.status(500).json({
+      success: false,
+      error: "Razorpay is not configured on server",
+    });
   }
-);
+
+  try {
+    const { amount, currency } = req.body;
+
+    const amt = Number(amount);
+    if (!amt || Number.isNaN(amt) || amt <= 0) {
+      return res.status(400).json({ success: false, error: "Invalid amount" });
+    }
+
+    const options = {
+      amount: Math.round(amt * 100), // paise
+      currency: currency || "INR",
+      receipt: "receipt_" + Date.now(),
+      notes: {
+        userId: req.auth.id,
+      },
+    };
+
+    const order = await razorpay.orders.create(options);
+    return res.json(order);
+  } catch (error) {
+    console.error("Error creating Razorpay order:", error);
+    return res.status(500).json({ success: false });
+  }
+});
 
 // Step 2: Verify Payment Signature
-router.post(
-  "/verify-payment",
-  razorpayLimiter,
-  async (req, res) => {
-    if (!requireAuth(req, res)) return;
+router.post("/verify-payment", razorpayLimiter, async (req, res) => {
+  if (!requireAuth(req, res)) return;
 
-    if (!HAS_RAZORPAY_CONFIG) {
-      return res.status(500).json({
-        success: false,
-        error: "Razorpay is not configured on server",
-      });
-    }
-
-    try {
-      const { razorpay_order_id, razorpay_payment_id, razorpay_signature } =
-        req.body;
-
-      if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
-        return res
-          .status(400)
-          .json({ success: false, error: "Missing Razorpay params" });
-      }
-
-      // If running in development/test mode → skip verification
-      if (NODE_ENV !== "production") {
-        console.log(
-          "⚠️ Skipping Razorpay signature verification in Test Mode"
-        );
-        return res.json({ success: true, testMode: true });
-      }
-
-      // Production: verify signature properly
-      const sign = razorpay_order_id + "|" + razorpay_payment_id;
-      const expectedSign = crypto
-        .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET || "")
-        .update(sign.toString())
-        .digest("hex");
-
-      if (razorpay_signature === expectedSign) {
-        return res.json({ success: true });
-      } else {
-        return res
-          .status(400)
-          .json({ success: false, error: "Invalid signature" });
-      }
-    } catch (err) {
-      console.error("❌ Verification error:", err);
-      return res
-        .status(500)
-        .json({ success: false, error: "Server error" });
-    }
+  if (!HAS_RAZORPAY_CONFIG) {
+    return res.status(500).json({
+      success: false,
+      error: "Razorpay is not configured on server",
+    });
   }
-);
+
+  try {
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } =
+      req.body;
+
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      return res
+        .status(400)
+        .json({ success: false, error: "Missing Razorpay params" });
+    }
+
+    // If running in development/test mode → skip verification
+    if (NODE_ENV !== "production") {
+      console.log("⚠️ Skipping Razorpay signature verification in Test Mode");
+      return res.json({ success: true, testMode: true });
+    }
+
+    // Production: verify signature properly
+    const sign = razorpay_order_id + "|" + razorpay_payment_id;
+    const expectedSign = crypto
+      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET || "")
+      .update(sign.toString())
+      .digest("hex");
+
+    if (razorpay_signature === expectedSign) {
+      return res.json({ success: true });
+    } else {
+      return res
+        .status(400)
+        .json({ success: false, error: "Invalid signature" });
+    }
+  } catch (err) {
+    console.error("❌ Verification error:", err);
+    return res.status(500).json({ success: false, error: "Server error" });
+  }
+});
 
 module.exports = router;

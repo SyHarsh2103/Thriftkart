@@ -34,6 +34,49 @@ const itemSchema = new mongoose.Schema(
   { _id: false } // no separate _id for items
 );
 
+// ---- Shiprocket reverse pickup sub-schema ----
+const reversePickupSchema = new mongoose.Schema(
+  {
+    enabled: { type: Boolean, default: false },
+
+    // IDs returned by Shiprocket for the reverse shipment
+    sr_order_id: { type: Number },
+    shipment_id: { type: Number },
+
+    // High-level status from Shiprocket
+    status: {
+      type: String,
+      trim: true,
+    },
+
+    // Optional fields for AWB / courier / docs / tracking
+    awb_code: {
+      type: String,
+      trim: true,
+    },
+    courier: {
+      type: String,
+      trim: true,
+    },
+    label_url: {
+      type: String,
+      trim: true,
+    },
+    manifest_url: {
+      type: String,
+      trim: true,
+    },
+    tracking_url: {
+      type: String,
+      trim: true,
+    },
+
+    // Raw Shiprocket payload (for debugging / future use)
+    raw: { type: mongoose.Schema.Types.Mixed },
+  },
+  { _id: false }
+);
+
 const returnRequestSchema = new mongoose.Schema(
   {
     // Which order is being returned
@@ -53,7 +96,6 @@ const returnRequestSchema = new mongoose.Schema(
     },
 
     // Snapshot of products being returned
-    // (we currently store the full order products in routes/returnRequests.js)
     items: [itemSchema],
 
     // Short reason (dropdown style): "damaged", "wrong item", etc.
@@ -63,8 +105,15 @@ const returnRequestSchema = new mongoose.Schema(
       trim: true,
     },
 
-    // Optional longer explanation
+    // Optional longer explanation from customer
     description: {
+      type: String,
+      trim: true,
+    },
+
+    // What customer/admin wants as outcome: "refund", "replacement", etc.
+    // (this is what admin UI shows under "Resolution")
+    resolution: {
       type: String,
       trim: true,
     },
@@ -94,7 +143,7 @@ const returnRequestSchema = new mongoose.Schema(
       index: true,
     },
 
-    // Optional extra fields (you can use later)
+    // Optional extra fields (internal notes)
     adminComment: {
       type: String,
       trim: true,
@@ -108,6 +157,12 @@ const returnRequestSchema = new mongoose.Schema(
     requestedAt: {
       type: Date,
       default: Date.now,
+    },
+
+    // 🔹 Shiprocket reverse pickup info (created when admin sets pickup_scheduled)
+    reversePickup: {
+      type: reversePickupSchema,
+      default: null,
     },
   },
   {

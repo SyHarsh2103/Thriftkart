@@ -97,7 +97,7 @@ const MyReturns = () => {
           <div>
             <h3 className="mb-1">My Return Requests</h3>
             <p className="mb-0 text-muted" style={{ fontSize: "13px" }}>
-              Track the status and details of your return & refund requests.
+              Track the status and details of your return &amp; refund requests.
             </p>
           </div>
           <Link to="/orders" className="btn btn-link">
@@ -120,6 +120,8 @@ const MyReturns = () => {
           <div className="row">
             {returns.map((rr) => {
               const order = rr.order || rr.orderId || {};
+              const reverse = rr.reversePickup || {}; // 🔹 reverse pickup info (Shiprocket)
+
               const orderNumber =
                 order.orderId || order.id || order._id || "—";
               const orderDateRaw = order.date || order.createdAt;
@@ -208,6 +210,48 @@ const MyReturns = () => {
                         )}
                       </div>
 
+                      {/* 🔹 Reverse Pickup info (if available) */}
+                      {reverse && reverse.enabled && (
+                        <>
+                          <Divider className="my-2" />
+                          <div className="mb-2">
+                            <Typography
+                              variant="subtitle2"
+                              className="text-muted mb-1"
+                            >
+                              Pickup Status (Shiprocket)
+                            </Typography>
+                            <Typography variant="body2" className="mb-1">
+                              Status:{" "}
+                              {reverse.status || "Pickup scheduled"}
+                            </Typography>
+                            {reverse.awb_code && (
+                              <Typography
+                                variant="body2"
+                                className="text-muted"
+                                style={{ fontSize: "13px" }}
+                              >
+                                AWB: {reverse.awb_code}
+                              </Typography>
+                            )}
+                            {reverse.tracking_url && (
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                color="primary"
+                                component="a"
+                                href={reverse.tracking_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                style={{ marginTop: 6 }}
+                              >
+                                Track Pickup
+                              </Button>
+                            )}
+                          </div>
+                        </>
+                      )}
+
                       <Divider className="my-2" />
 
                       {/* Requested on */}
@@ -250,7 +294,10 @@ const MyReturns = () => {
                                     />
                                   )}
                                   <div>
-                                    <p className="mb-1" style={{ fontSize: 13 }}>
+                                    <p
+                                      className="mb-1"
+                                      style={{ fontSize: 13 }}
+                                    >
                                       {item.productTitle} × {item.quantity}
                                     </p>
                                     <small className="text-muted">
@@ -271,7 +318,7 @@ const MyReturns = () => {
                         className="text-muted"
                         style={{ fontSize: "11px" }}
                       >
-                        We&apos;ll keep you updated via email & My Orders.
+                        We&apos;ll keep you updated via email &amp; My Orders.
                       </span>
                       <Link
                         to="/orders"

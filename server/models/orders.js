@@ -1,5 +1,48 @@
 const mongoose = require("mongoose");
 
+// ---- Shiprocket sub-schema ----
+const shiprocketSchema = new mongoose.Schema(
+  {
+    enabled: { type: Boolean, default: false },
+
+    // IDs returned by Shiprocket
+    sr_order_id: { type: Number },   // Shiprocket's order_id
+    shipment_id: { type: Number },   // Shiprocket's shipment_id
+
+    // High-level status from Shiprocket (e.g. "created", "processed", etc.)
+    status: {
+      type: String,
+      trim: true,
+    },
+
+    // Optional fields for AWB / courier / docs
+    awb_code: {
+      type: String,
+      trim: true,
+    },
+    courier: {
+      type: String,
+      trim: true,
+    },
+    label_url: {
+      type: String,
+      trim: true,
+    },
+    manifest_url: {
+      type: String,
+      trim: true,
+    },
+    tracking_url: {
+      type: String,
+      trim: true,
+    },
+
+    // Raw Shiprocket payload (for debugging / future use)
+    raw: { type: mongoose.Schema.Types.Mixed },
+  },
+  { _id: false }
+);
+
 const ordersSchema = new mongoose.Schema(
   {
     orderId: {
@@ -23,6 +66,20 @@ const ordersSchema = new mongoose.Schema(
     address: {
       type: String,
       required: true,
+      trim: true,
+    },
+
+    // 🔹 Extra address fields (optional but very useful for Shiprocket)
+    city: {
+      type: String,
+      trim: true,
+    },
+    state: {
+      type: String,
+      trim: true,
+    },
+    country: {
+      type: String,
       trim: true,
     },
 
@@ -99,8 +156,14 @@ const ordersSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      default: "pending", // pending | processing | shipped | delivered | cancelled etc.
+      default: "pending", // pending | confirm | shipped | delivered | cancelled etc.
       trim: true,
+    },
+
+    // 🔹 NEW: Shiprocket info
+    shiprocket: {
+      type: shiprocketSchema,
+      default: null,
     },
 
     date: {

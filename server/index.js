@@ -176,27 +176,40 @@ app.use((req, res, next) => {
   res.status(404).json({ error: "Not found" });
 });
 
-// ===== Global Error Handler =====
+// ===== Global Error Handler (includes JWT expired handling) =====
 app.use((err, req, res, next) => {
-  console.error(err);
+  // 🔐 Handle JWT auth errors from express-jwt
+  if (err.name === "UnauthorizedError" || err.code === "invalid_token") {
+    // Token specifically expired
+    if (err.inner && err.inner.name === "TokenExpiredError") {
+      console.warn("JWT expired for request:", req.method, req.path);
+      return res.status(401).json({
+        success: false,
+        message: "Session expired. Please log in again.",
+      });
+    }
 
-  // Handle JWT auth errors from express-jwt
-  if (err.name === "UnauthorizedError") {
-    return res.status(401).json({ error: "Invalid or missing token" });
+    // Other invalid token cases
+    console.warn("JWT invalid for request:", req.method, req.path);
+    return res.status(401).json({
+      success: false,
+      message: "Invalid or missing token.",
+    });
   }
+
+  // Other errors
+  console.error("Unhandled server error:", err);
 
   if (NODE_ENV === "production") {
     return res.status(500).json({ error: "Something went wrong" });
   }
+
   res.status(500).json({ error: err.message, stack: err.stack });
 });
 
 // ===== DB & Server =====
 mongoose
-  .connect(process.env.CONNECTION_STRING, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
+  .connect(process.env.CONNECTION_STRING) // ✅ removed deprecated options
   .then(() => {
     console.log("✅ MongoDB connected");
     app.listen(PORT, () => {

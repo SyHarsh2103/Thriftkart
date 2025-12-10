@@ -36,7 +36,7 @@ const Orders = () => {
 
     const loadOrders = async () => {
       try {
-        // ✅ Backend now uses req.auth.id to filter orders safely
+        // ✅ Backend uses req.auth.id to filter orders safely
         const res = await fetchDataFromApi("/api/orders");
         setOrders(Array.isArray(res) ? res : []);
       } catch (err) {
@@ -88,135 +88,186 @@ const Orders = () => {
         {!loading && orders?.length === 0 && <p>No orders found.</p>}
 
         {!loading &&
-          orders?.map((order) => (
-            <Card
-              key={order._id || order.id}
-              variant="outlined"
-              className="mb-3 shadow-sm rounded"
-            >
-              <CardContent>
-                <Typography variant="h6" className="text-blue">
-                  Order #{order?.orderId || order?.id || order?._id}
-                </Typography>
-                <Typography variant="body2" color="textSecondary">
-                  Placed on{" "}
-                  {order?.date
-                    ? order.date.split("T")[0]
-                    : order?.createdAt
-                    ? new Date(order.createdAt).toLocaleDateString()
-                    : ""}
-                </Typography>
-                <Divider className="my-2" />
+          orders?.map((order) => {
+            const shiprocket = order.shiprocket || {};
 
-                <div className="row">
-                  {/* Customer Info */}
-                  <div className="col-md-4">
-                    <p>
-                      <b>Name:</b> {order?.name}
-                    </p>
-                    <p>
-                      <b>Phone:</b> {order?.phoneNumber}
-                    </p>
-                  </div>
+            return (
+              <Card
+                key={order._id || order.id}
+                variant="outlined"
+                className="mb-3 shadow-sm rounded"
+              >
+                <CardContent>
+                  <Typography variant="h6" className="text-blue">
+                    Order #{order?.orderId || order?.id || order?._id}
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    Placed on{" "}
+                    {order?.date
+                      ? order.date.split("T")[0]
+                      : order?.createdAt
+                      ? new Date(order.createdAt).toLocaleDateString()
+                      : ""}
+                  </Typography>
+                  <Divider className="my-2" />
 
-                  {/* Address + Email */}
-                  <div className="col-md-4">
-                    <p>
-                      <b>Address:</b> {order?.address}, {order?.pincode}
-                    </p>
-                    <p>
-                      <b>Email:</b> {order?.email}
-                    </p>
-                  </div>
+                  <div className="row">
+                    {/* Customer Info */}
+                    <div className="col-md-4">
+                      <p>
+                        <b>Name:</b> {order?.name}
+                      </p>
+                      <p>
+                        <b>Phone:</b> {order?.phoneNumber}
+                      </p>
+                    </div>
 
-                  {/* Payment Info */}
-                  <div className="col-md-4">
-                    <p>
-                      <b>Amount:</b> ₹{order?.amount}
-                    </p>
-                    <p>
-                      <b>Payment:</b>{" "}
-                      {order?.paymentType === "COD" ? (
-                        <span className="badge badge-secondary">
-                          Cash on Delivery
-                        </span>
-                      ) : (
-                        <span className="badge badge-info">Online</span>
+                    {/* Address + Email */}
+                    <div className="col-md-4">
+                      <p>
+                        <b>Address:</b> {order?.address}, {order?.pincode}
+                      </p>
+                      <p>
+                        <b>Email:</b> {order?.email}
+                      </p>
+
+                      {/* 🔹 Optional: show Shiprocket status here too */}
+                      {shiprocket?.enabled && (
+                        <>
+                          <p>
+                            <b>Shipment Status:</b>{" "}
+                            {shiprocket.status || "Created"}
+                          </p>
+                          {shiprocket.awb_code && (
+                            <p>
+                              <b>AWB:</b> {shiprocket.awb_code}
+                            </p>
+                          )}
+                        </>
                       )}
-                    </p>
-                    <p>
-                      <b>Status:</b>{" "}
-                      <span
-                        className={`badge ${
-                          order?.status === "pending"
-                            ? "badge-danger"
-                            : order?.status === "delivered"
-                            ? "badge-success"
-                            : "badge-warning"
-                        }`}
-                      >
-                        {order?.status}
-                      </span>
-                    </p>
+                    </div>
+
+                    {/* Payment + Actions */}
+                    <div className="col-md-4">
+                      <p>
+                        <b>Amount:</b> ₹{order?.amount}
+                      </p>
+                      <p>
+                        <b>Payment:</b>{" "}
+                        {order?.paymentType === "COD" ? (
+                          <span className="badge badge-secondary">
+                            Cash on Delivery
+                          </span>
+                        ) : (
+                          <span className="badge badge-info">Online</span>
+                        )}
+                      </p>
+                      <p>
+                        <b>Status:</b>{" "}
+                        <span
+                          className={`badge ${
+                            order?.status === "pending"
+                              ? "badge-danger"
+                              : order?.status === "delivered"
+                              ? "badge-success"
+                              : "badge-warning"
+                          }`}
+                        >
+                          {order?.status}
+                        </span>
+                      </p>
+
+                      {/* 🔗 Track Shipment link (if Shiprocket has tracking_url) */}
+                      {shiprocket?.tracking_url && (
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          color="primary"
+                          component="a"
+                          href={shiprocket.tracking_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{ marginTop: 4 }}
+                        >
+                          Track Shipment
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                </div>
 
-                {/* Actions: View Products + Request Return */}
-                <div className="mt-2">
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    onClick={() => toggleExpand(order._id)}
-                  >
-                    {expandedOrder === order._id
-                      ? "Hide Products"
-                      : "View Products"}
-                  </Button>
-
-                  {/* 🔁 Show Return button only for delivered orders */}
-                  {order?.status === "delivered" && (
+                  {/* Actions: View Products + Request Return */}
+                  <div className="mt-2">
                     <Button
                       size="small"
-                      variant="contained"
-                      color="primary"
-                      style={{ marginLeft: 8 }}
-                      onClick={() => handleReturnRequest(order._id)}
+                      variant="outlined"
+                      onClick={() => toggleExpand(order._id)}
                     >
-                      Request Return
+                      {expandedOrder === order._id
+                        ? "Hide Products"
+                        : "View Products"}
                     </Button>
-                  )}
-                </div>
 
-                <Collapse in={expandedOrder === order._id}>
-                  <Divider className="my-2" />
-                  <Typography variant="subtitle1">Products</Typography>
-                  {order?.products?.map((item, idx) => (
-                    <div
-                      key={idx}
-                      className="d-flex align-items-center border-bottom py-2"
-                    >
-                      <img
-                        src={item?.image}
-                        alt={item?.productTitle}
-                        style={{
-                          width: "50px",
-                          height: "50px",
-                          objectFit: "cover",
-                          marginRight: "10px",
-                        }}
-                      />
-                      <div>
-                        <p className="mb-0">
-                          {item?.productTitle} × {item?.quantity}
-                        </p>
-                        <small>₹{item?.subTotal}</small>
+                    {/* 🔁 Show Return button only for delivered orders */}
+                    {order?.status === "delivered" && (
+                      <Button
+                        size="small"
+                        variant="contained"
+                        color="primary"
+                        style={{ marginLeft: 8 }}
+                        onClick={() => handleReturnRequest(order._id)}
+                      >
+                        Request Return
+                      </Button>
+                    )}
+
+                    {/* (Optional) You could also repeat Track Shipment link here instead of above */}
+                    {/* {shiprocket?.tracking_url && (
+                      <Button
+                        size="small"
+                        variant="text"
+                        color="primary"
+                        style={{ marginLeft: 8 }}
+                        component="a"
+                        href={shiprocket.tracking_url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Track Shipment
+                      </Button>
+                    )} */}
+                  </div>
+
+                  <Collapse in={expandedOrder === order._id}>
+                    <Divider className="my-2" />
+                    <Typography variant="subtitle1">Products</Typography>
+                    {order?.products?.map((item, idx) => (
+                      <div
+                        key={idx}
+                        className="d-flex align-items-center border-bottom py-2"
+                      >
+                        <img
+                          src={item?.image}
+                          alt={item?.productTitle}
+                          style={{
+                            width: "50px",
+                            height: "50px",
+                            objectFit: "cover",
+                            marginRight: "10px",
+                          }}
+                        />
+                        <div>
+                          <p className="mb-0">
+                            {item?.productTitle} × {item?.quantity}
+                          </p>
+                          <small>₹{item?.subTotal}</small>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </Collapse>
-              </CardContent>
-            </Card>
-          ))}
+                    ))}
+                  </Collapse>
+                </CardContent>
+              </Card>
+            );
+          })}
       </div>
     </section>
   );

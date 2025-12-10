@@ -1,8 +1,5 @@
 import React, { useContext, useEffect, useState } from "react";
-import {
-  editData,
-  fetchDataFromApi,
-} from "../../utils/api";
+import { editData, fetchDataFromApi } from "../../utils/api";
 
 import { emphasize, styled } from "@mui/material/styles";
 import Breadcrumbs from "@mui/material/Breadcrumbs";
@@ -11,7 +8,6 @@ import HomeIcon from "@mui/icons-material/Home";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
-import Pagination from "@mui/material/Pagination";
 import Dialog from "@mui/material/Dialog";
 import Button from "@mui/material/Button";
 
@@ -53,9 +49,11 @@ const StyledBreadcrumb = styled(Chip)(({ theme }) => {
   };
 });
 
+// ---------- Table columns ----------
 const columns = [
-  { id: "orderId", label: "Order Id", minWidth: 150 },
-  { id: "paymantId", label: "Payment Id", minWidth: 120 }, // label typo fixed only for display
+  { id: "orderId", label: "Order Id", minWidth: 130 }, // TKORxxxx
+  { id: "mongoId", label: "Mongo Id", minWidth: 150 }, // _id (for debugging)
+  { id: "paymentId", label: "Payment Id", minWidth: 140 },
   { id: "products", label: "Products", minWidth: 150 },
   { id: "name", label: "Name", minWidth: 130 },
   { id: "phoneNumber", label: "Phone Number", minWidth: 150 },
@@ -63,7 +61,15 @@ const columns = [
   { id: "pincode", label: "Pincode", minWidth: 120 },
   { id: "totalAmount", label: "Total Amount", minWidth: 120 },
   { id: "email", label: "Email", minWidth: 180 },
-  { id: "userId", label: "User Id", minWidth: 120 },
+  { id: "userId", label: "User Id", minWidth: 150 },
+
+  // 🔹 Shiprocket info
+  { id: "srOrderId", label: "SR Order Id", minWidth: 130 },
+  { id: "srShipmentId", label: "SR Shipment Id", minWidth: 130 },
+  { id: "srAwbCode", label: "AWB Code", minWidth: 130 },
+  { id: "srStatus", label: "SR Status", minWidth: 130 },
+  { id: "srTrack", label: "Track", minWidth: 120 }, // 👈 NEW COLUMN
+
   { id: "orderStatus", label: "Order Status", minWidth: 140 },
   { id: "dateCreated", label: "Date Created", minWidth: 150 },
 ];
@@ -73,9 +79,7 @@ const Orders = () => {
   const [products, setProducts] = useState([]);
   const [isOpenModal, setIsOpenModal] = useState(false);
 
-  const [statusVal, setStatusVal] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
-
   const [page1, setPage1] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
@@ -100,11 +104,10 @@ const Orders = () => {
         const res = await fetchDataFromApi(`/api/orders`);
 
         if (!Array.isArray(res)) {
-          // api.js returns {success:false, msg:'Request failed'} on error
           context.setAlertBox({
             open: true,
             error: true,
-            msg: res?.msg || "Failed to fetch orders.",
+            msg: "Failed to fetch orders.",
           });
           setOrders([]);
         } else {
@@ -115,7 +118,7 @@ const Orders = () => {
         context.setAlertBox({
           open: true,
           error: true,
-          msg: "Something went wrong while fetching orders.",
+          msg: err?.message || "Something went wrong while fetching orders.",
         });
         setOrders([]);
       } finally {
@@ -148,71 +151,50 @@ const Orders = () => {
       context.setAlertBox({
         open: true,
         error: true,
-        msg: "Something went wrong while loading products.",
+        msg: err?.message || "Something went wrong while loading products.",
       });
     } finally {
       context.setProgress?.(100);
     }
   };
 
-  // ---------- Change status of an order (Pending → Confirm → Delivered) ----------
+  // ---------- Change status of an order ----------
   const handleChangeStatus = async (e, orderId) => {
     const newStatus = e.target.value;
-    setStatusVal(newStatus);
+    if (!newStatus) return;
+
     setIsLoading(true);
     context.setProgress?.(40);
 
     try {
-      const res = await fetchDataFromApi(`/api/orders/${orderId}`);
-      if (!res) {
-        context.setAlertBox({
-          open: true,
-          error: true,
-          msg: "Order not found.",
-        });
-        return;
-      }
-
-      const orderPayload = {
-        name: res.name,
-        phoneNumber: res.phoneNumber,
-        address: res.address,
-        pincode: res.pincode,
-        amount: parseInt(res.amount, 10),
-        paymentId: res.paymentId,
-        email: res.email,
-        userid: res.userId,
-        products: res.products,
+      const updateRes = await editData(`/api/orders/${orderId}`, {
         status: newStatus,
-        date: res.date, // keep original date if backend expects it
-      };
+      });
 
-      const updateRes = await editData(`/api/orders/${orderId}`, orderPayload);
       if (updateRes?.success === false || updateRes?.error) {
         context.setAlertBox({
           open: true,
           error: true,
           msg: updateRes?.msg || "Failed to update order status.",
         });
-      }
+      } else {
+        const refreshed = await fetchDataFromApi(`/api/orders`);
+        if (Array.isArray(refreshed)) {
+          setOrders(refreshed);
+        }
 
-      // Refresh orders
-      const refreshed = await fetchDataFromApi(`/api/orders`);
-      if (Array.isArray(refreshed)) {
-        setOrders(refreshed);
+        context.setAlertBox({
+          open: true,
+          error: false,
+          msg: "Order status updated successfully.",
+        });
       }
-
-      context.setAlertBox({
-        open: true,
-        error: false,
-        msg: "Order status updated successfully.",
-      });
     } catch (err) {
       console.error("Error updating order status:", err);
       context.setAlertBox({
         open: true,
         error: true,
-        msg: "Something went wrong while updating status.",
+        msg: err?.message || "Something went wrong while updating status.",
       });
     } finally {
       context.setProgress?.(100);
@@ -220,12 +202,11 @@ const Orders = () => {
     }
   };
 
-  // Helpers
-  const paginatedOrders = Array.isArray(orders)
-    ? [...orders]
-        .slice(page1 * rowsPerPage, page1 * rowsPerPage + rowsPerPage)
-        .reverse()
-    : [];
+  const sortedOrders = Array.isArray(orders) ? [...orders] : [];
+  const paginatedOrders = sortedOrders.slice(
+    page1 * rowsPerPage,
+    page1 * rowsPerPage + rowsPerPage
+  );
 
   return (
     <>
@@ -274,80 +255,174 @@ const Orders = () => {
 
                 <TableBody>
                   {paginatedOrders?.length > 0 ? (
-                    paginatedOrders.map((order) => (
-                      <TableRow hover key={order._id}>
-                        <TableCell>
-                          <span className="text-blue font-weight-bold">
-                            {order?._id}
-                          </span>
-                        </TableCell>
+                    paginatedOrders.map((order) => {
+                      const shiprocket = order.shiprocket || {};
 
-                        <TableCell>
-                          <span className="text-blue font-weight-bold">
-                            {order?.paymentId || "—"}
-                          </span>
-                        </TableCell>
+                      return (
+                        <TableRow hover key={order._id}>
+                          {/* Thriftkart orderId (e.g., TKOR1234) */}
+                          <TableCell>
+                            <span className="text-blue font-weight-bold">
+                              {order?.orderId || "—"}
+                            </span>
+                          </TableCell>
 
-                        <TableCell>
-                          <span
-                            className="text-blue font-weight-bold cursor"
-                            onClick={() => showProducts(order?._id)}
-                          >
-                            Click here to view
-                          </span>
-                        </TableCell>
+                          {/* Mongo _id */}
+                          <TableCell>
+                            <span className="text-muted small">
+                              {order?._id}
+                            </span>
+                          </TableCell>
 
-                        <TableCell>{order?.name}</TableCell>
+                          {/* Payment Id */}
+                          <TableCell>
+                            <span className="text-blue font-weight-bold">
+                              {order?.paymentId || "—"}
+                            </span>
+                          </TableCell>
 
-                        <TableCell>
-                          <FaPhoneAlt /> {order?.phoneNumber || "—"}
-                        </TableCell>
+                          {/* Products */}
+                          <TableCell>
+                            <span
+                              className="text-blue font-weight-bold cursor"
+                              onClick={() => showProducts(order?._id)}
+                            >
+                              Click here to view
+                            </span>
+                          </TableCell>
 
-                        <TableCell>{order?.address}</TableCell>
+                          {/* Customer name */}
+                          <TableCell>{order?.name}</TableCell>
 
-                        <TableCell>{order?.pincode}</TableCell>
+                          {/* Phone */}
+                          <TableCell>
+                            <FaPhoneAlt /> {order?.phoneNumber || "—"}
+                          </TableCell>
 
-                        <TableCell>
-                          <MdOutlineCurrencyRupee /> {order?.amount}
-                        </TableCell>
+                          {/* Address */}
+                          <TableCell>{order?.address}</TableCell>
 
-                        <TableCell>
-                          <MdOutlineEmail /> {order?.email}
-                        </TableCell>
+                          {/* Pincode */}
+                          <TableCell>{order?.pincode}</TableCell>
 
-                        <TableCell>{order?.userid}</TableCell>
+                          {/* Amount */}
+                          <TableCell>
+                            <MdOutlineCurrencyRupee /> {order?.amount}
+                          </TableCell>
 
-                        <TableCell>
-                          <Select
-                            disabled={isLoading}
-                            value={
-                              typeof order?.status === "string"
-                                ? order.status
-                                : statusVal || ""
-                            }
-                            onChange={(e) => handleChangeStatus(e, order?._id)}
-                            displayEmpty
-                            inputProps={{ "aria-label": "Order status" }}
-                            size="small"
-                            className="w-100"
-                          >
-                            <MenuItem value="">
-                              <em>None</em>
-                            </MenuItem>
-                            <MenuItem value="pending">Pending</MenuItem>
-                            <MenuItem value="confirm">Confirm</MenuItem>
-                            <MenuItem value="delivered">Delivered</MenuItem>
-                          </Select>
-                        </TableCell>
+                          {/* Email */}
+                          <TableCell>
+                            <MdOutlineEmail /> {order?.email}
+                          </TableCell>
 
-                        <TableCell>
-                          <MdOutlineDateRange />{" "}
-                          {order?.date
-                            ? String(order.date).split("T")[0]
-                            : "—"}
-                        </TableCell>
-                      </TableRow>
-                    ))
+                          {/* UserId */}
+                          <TableCell>{order?.userid}</TableCell>
+
+                          {/* Shiprocket Order Id */}
+                          <TableCell>
+                            {typeof shiprocket?.sr_order_id !== "undefined" &&
+                            shiprocket?.sr_order_id !== null ? (
+                              <span className="text-blue font-weight-bold">
+                                {shiprocket.sr_order_id}
+                              </span>
+                            ) : (
+                              <span className="text-muted small">
+                                Not synced
+                              </span>
+                            )}
+                          </TableCell>
+
+                          {/* Shiprocket Shipment Id */}
+                          <TableCell>
+                            {typeof shiprocket?.shipment_id !== "undefined" &&
+                            shiprocket?.shipment_id !== null ? (
+                              <span>{shiprocket.shipment_id}</span>
+                            ) : (
+                              <span className="text-muted small">—</span>
+                            )}
+                          </TableCell>
+
+                          {/* AWB Code */}
+                          <TableCell>
+                            {shiprocket?.awb_code ? (
+                              <span>{shiprocket.awb_code}</span>
+                            ) : (
+                              <span className="text-muted small">—</span>
+                            )}
+                          </TableCell>
+
+                          {/* Shiprocket Status */}
+                          <TableCell>
+                            {shiprocket?.status ? (
+                              <span>{shiprocket.status}</span>
+                            ) : shiprocket?.enabled ? (
+                              <span className="text-muted small">
+                                Created (no status)
+                              </span>
+                            ) : (
+                              <span className="text-muted small">—</span>
+                            )}
+                          </TableCell>
+
+                          {/* 🔗 Track Shipment */}
+                          <TableCell>
+                            {shiprocket?.tracking_url ? (
+                              <a
+                                href={shiprocket.tracking_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="btn btn-sm btn-outline-primary"
+                              >
+                                Track
+                              </a>
+                            ) : (
+                              <span className="text-muted small">
+                                No tracking
+                              </span>
+                            )}
+                          </TableCell>
+
+                          {/* Order Status (local) */}
+                          <TableCell>
+                            <Select
+                              disabled={isLoading}
+                              value={
+                                typeof order?.status === "string"
+                                  ? order.status
+                                  : ""
+                              }
+                              onChange={(e) =>
+                                handleChangeStatus(e, order?._id)
+                              }
+                              displayEmpty
+                              inputProps={{ "aria-label": "Order status" }}
+                              size="small"
+                              className="w-100"
+                            >
+                              <MenuItem value="">
+                                <em>None</em>
+                              </MenuItem>
+                              <MenuItem value="pending">Pending</MenuItem>
+                              <MenuItem value="confirm">Confirm</MenuItem>
+                              <MenuItem value="processing">
+                                Processing
+                              </MenuItem>
+                              <MenuItem value="shipped">Shipped</MenuItem>
+                              <MenuItem value="delivered">Delivered</MenuItem>
+                              <MenuItem value="cancelled">Cancelled</MenuItem>
+                            </Select>
+                          </TableCell>
+
+                          {/* Date */}
+                          <TableCell>
+                            <MdOutlineDateRange />{" "}
+                            {order?.date
+                              ? String(order.date).split("T")[0]
+                              : "—"}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
                   ) : (
                     <TableRow>
                       <TableCell colSpan={columns.length} align="center">
@@ -373,7 +448,11 @@ const Orders = () => {
       </div>
 
       {/* Products Modal */}
-      <Dialog open={isOpenModal} className="productModal" onClose={() => setIsOpenModal(false)}>
+      <Dialog
+        open={isOpenModal}
+        className="productModal"
+        onClose={() => setIsOpenModal(false)}
+      >
         <Button className="close_" onClick={() => setIsOpenModal(false)}>
           <MdClose />
         </Button>
@@ -406,7 +485,9 @@ const Orders = () => {
                     </td>
                     <td>
                       <div className="img">
-                        {item?.image && <img src={item.image} alt={item?.productTitle} />}
+                        {item?.image && (
+                          <img src={item.image} alt={item?.productTitle} />
+                        )}
                       </div>
                     </td>
                     <td>{item?.quantity}</td>

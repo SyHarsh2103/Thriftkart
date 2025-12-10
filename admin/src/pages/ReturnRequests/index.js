@@ -21,10 +21,12 @@ import Select from "@mui/material/Select";
 import MenuItem from "@mui/material/MenuItem";
 import Dialog from "@mui/material/Dialog";
 import Button from "@mui/material/Button";
-import { MdClose } from "react-icons/md";
 import CircularProgress from "@mui/material/CircularProgress";
 import Typography from "@mui/material/Typography";
 import Divider from "@mui/material/Divider";
+
+// ✅ Use react-icons for MdClose (your comment suggested this)
+import { MdClose } from "react-icons/md";
 
 const StyledBreadcrumb = styled(Chip)(({ theme }) => {
   const backgroundColor =
@@ -53,9 +55,23 @@ const columns = [
   { id: "reason", label: "Reason", minWidth: 160 },
   { id: "resolution", label: "Resolution", minWidth: 140 },
   { id: "status", label: "Status", minWidth: 180 },
+  // 🔹 New columns for reverse pickup
+  { id: "reverseAwb", label: "Reverse AWB", minWidth: 150 },
+  { id: "reverseTracking", label: "Pickup Tracking", minWidth: 160 },
   { id: "requestedAt", label: "Requested At", minWidth: 140 },
   { id: "items", label: "Items", minWidth: 120 },
 ];
+
+// Small helper for dates
+const formatDateOnly = (value) => {
+  if (!value) return "-";
+  try {
+    if (value.includes("T")) return value.split("T")[0];
+    return value;
+  } catch {
+    return value;
+  }
+};
 
 const AdminReturnRequests = () => {
   const [rows, setRows] = useState([]);
@@ -73,7 +89,7 @@ const AdminReturnRequests = () => {
     setIsLoading(true);
     fetchDataFromApi("/api/returns")
       .then((res) => {
-        // Expecting array of return requests, each with populated userId & orderId
+        // Expecting { success, data } from backend
         if (Array.isArray(res)) {
           setRows(res);
         } else if (res?.data && Array.isArray(res.data)) {
@@ -87,7 +103,7 @@ const AdminReturnRequests = () => {
         context.setAlertBox({
           open: true,
           error: true,
-          msg: err.message || "Failed to load return requests",
+          msg: err?.message || "Failed to load return requests",
         });
       })
       .finally(() => setIsLoading(false));
@@ -123,7 +139,7 @@ const AdminReturnRequests = () => {
         context.setAlertBox({
           open: true,
           error: true,
-          msg: err.message || "Failed to update status",
+          msg: err?.message || "Failed to update status",
         });
       })
       .finally(() => {
@@ -134,9 +150,10 @@ const AdminReturnRequests = () => {
 
   const openItemsDialog = (rr) => {
     // Prefer rr.items, fallback to full order products if needed
-    const items = rr.items && rr.items.length
-      ? rr.items
-      : rr.orderId?.products || [];
+    const items =
+      (rr.items && rr.items.length && rr.items) ||
+      rr.orderId?.products ||
+      [];
 
     setDialogRequest(rr);
     setDialogItems(items);
@@ -206,13 +223,17 @@ const AdminReturnRequests = () => {
                     .map((rr) => {
                       const order = rr.orderId || {};
                       const user = rr.userId || {};
+                      const reverse = rr.reversePickup || {};
 
                       const orderNumber =
-                        order.orderId || order._id || rr.orderNumber || rr._id;
+                        order.orderId ||
+                        order._id ||
+                        rr.orderNumber ||
+                        rr._id;
 
-                      const requestedDate = rr.requestedAt
-                        ? rr.requestedAt.split("T")[0]
-                        : rr.createdAt?.split("T")[0];
+                      const requestedDate =
+                        formatDateOnly(rr.requestedAt) ||
+                        formatDateOnly(rr.createdAt);
 
                       return (
                         <TableRow hover key={rr._id}>
@@ -233,7 +254,7 @@ const AdminReturnRequests = () => {
                           <TableCell>
                             {user.name || "-"}
                             <br />
-                            <small>{user.email}</small>
+                            <small>{user.email || "-"}</small>
                             {user.phoneNumber && (
                               <>
                                 <br />
@@ -274,6 +295,29 @@ const AdminReturnRequests = () => {
                             </Select>
                           </TableCell>
 
+                          {/* 🔹 Reverse AWB */}
+                          <TableCell>
+                            {reverse.enabled && reverse.awb_code
+                              ? reverse.awb_code
+                              : "—"}
+                          </TableCell>
+
+                          {/* 🔹 Pickup Tracking link */}
+                          <TableCell>
+                            {reverse.enabled && reverse.tracking_url ? (
+                              <a
+                                href={reverse.tracking_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-blue"
+                              >
+                                Track Pickup
+                              </a>
+                            ) : (
+                              <span className="text-muted small">—</span>
+                            )}
+                          </TableCell>
+
                           {/* Requested At */}
                           <TableCell>{requestedDate || "-"}</TableCell>
 
@@ -307,7 +351,12 @@ const AdminReturnRequests = () => {
       </div>
 
       {/* Dialog with full Order + User + Products details */}
-      <Dialog open={isDialogOpen} className="productModal" maxWidth="md" fullWidth>
+      <Dialog
+        open={isDialogOpen}
+        className="productModal"
+        maxWidth="md"
+        fullWidth
+      >
         <Button className="close_" onClick={closeDialog}>
           <MdClose />
         </Button>
@@ -350,10 +399,47 @@ const AdminReturnRequests = () => {
                   <p className="mb-1">
                     <b>Placed On:</b>{" "}
                     {dialogRequest.orderId?.date
-                      ? dialogRequest.orderId.date.split("T")[0]
-                      : dialogRequest.orderId?.createdAt?.split("T")[0] ||
-                        "-"}
+                      ? formatDateOnly(dialogRequest.orderId.date)
+                      : formatDateOnly(
+                          dialogRequest.orderId?.createdAt || ""
+                        ) || "-"}
                   </p>
+                  {/* 🔹 Shiprocket info (forward shipment) */}
+                  {dialogRequest.orderId?.shiprocket &&
+                    dialogRequest.orderId.shiprocket.enabled && (
+                      <div className="mt-2">
+                        <Typography variant="subtitle2" gutterBottom>
+                          <strong>Shipment (Shiprocket)</strong>
+                        </Typography>
+                        <p className="mb-1">
+                          <b>Status:</b>{" "}
+                          {dialogRequest.orderId.shiprocket.status ||
+                            "Created"}
+                        </p>
+                        {dialogRequest.orderId.shiprocket.awb_code && (
+                          <p className="mb-1">
+                            <b>AWB:</b>{" "}
+                            {dialogRequest.orderId.shiprocket.awb_code}
+                          </p>
+                        )}
+                        {dialogRequest.orderId.shiprocket.tracking_url && (
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            color="primary"
+                            component="a"
+                            href={
+                              dialogRequest.orderId.shiprocket.tracking_url
+                            }
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{ marginTop: 4 }}
+                          >
+                            Track Shipment
+                          </Button>
+                        )}
+                      </div>
+                    )}
                 </div>
 
                 {/* User + address */}
@@ -403,6 +489,40 @@ const AdminReturnRequests = () => {
               <p className="mb-1">
                 <b>Status:</b> {dialogRequest.status || "pending"}
               </p>
+
+              {/* 🔹 Reverse Pickup (Shiprocket) */}
+              {dialogRequest.reversePickup &&
+                dialogRequest.reversePickup.enabled && (
+                  <>
+                    <Divider className="my-3" />
+                    <Typography variant="subtitle2" gutterBottom>
+                      <strong>Reverse Pickup (Shiprocket)</strong>
+                    </Typography>
+                    <p className="mb-1">
+                      <b>Status:</b>{" "}
+                      {dialogRequest.reversePickup.status || "Created"}
+                    </p>
+                    {dialogRequest.reversePickup.awb_code && (
+                      <p className="mb-1">
+                        <b>AWB:</b> {dialogRequest.reversePickup.awb_code}
+                      </p>
+                    )}
+                    {dialogRequest.reversePickup.tracking_url && (
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        color="primary"
+                        component="a"
+                        href={dialogRequest.reversePickup.tracking_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ marginTop: 4 }}
+                      >
+                        Track Pickup
+                      </Button>
+                    )}
+                  </>
+                )}
             </div>
           </>
         )}
@@ -422,28 +542,42 @@ const AdminReturnRequests = () => {
               </tr>
             </thead>
             <tbody>
-              {dialogItems?.map((item, index) => (
-                <tr key={index}>
-                  <td>{item.productId}</td>
-                  <td style={{ whiteSpace: "inherit" }}>
-                    {item.productTitle}
-                  </td>
-                  <td>
-                    <div className="img">
-                      {item.image && (
-                        <img
-                          src={item.image}
-                          alt={item.productTitle}
-                          style={{ maxWidth: "60px" }}
-                        />
-                      )}
-                    </div>
-                  </td>
-                  <td>{item.quantity}</td>
-                  <td>{item.price}</td>
-                  <td>{item.subTotal}</td>
-                </tr>
-              ))}
+              {dialogItems?.map((item, index) => {
+                const productId =
+                  (item.productId && item.productId._id) || item.productId || "-";
+                const productTitle =
+                  item.productTitle ||
+                  (item.productId && item.productId.title) ||
+                  "-";
+                const image =
+                  item.image ||
+                  (item.productId && item.productId.image) ||
+                  null;
+                const quantity = item.quantity ?? item.qty ?? 1;
+                const price = item.price ?? 0;
+                const subTotal = item.subTotal ?? price * quantity;
+
+                return (
+                  <tr key={index}>
+                    <td>{productId}</td>
+                    <td style={{ whiteSpace: "inherit" }}>{productTitle}</td>
+                    <td>
+                      <div className="img">
+                        {image && (
+                          <img
+                            src={image}
+                            alt={productTitle}
+                            style={{ maxWidth: "60px" }}
+                          />
+                        )}
+                      </div>
+                    </td>
+                    <td>{quantity}</td>
+                    <td>{price}</td>
+                    <td>{subTotal}</td>
+                  </tr>
+                );
+              })}
               {(!dialogItems || dialogItems.length === 0) && (
                 <tr>
                   <td colSpan={6} className="text-center">

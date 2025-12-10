@@ -23,6 +23,13 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+// ---------- Helper: safely extract data ----------
+function safeData(res) {
+  if (!res || typeof res !== "object") return null;
+  if (!("data" in res)) return null;
+  return res.data;
+}
+
 // Normalize errors so all admin pages can handle them the same way
 api.interceptors.response.use(
   (response) => response,
@@ -74,7 +81,7 @@ api.interceptors.response.use(
         window.location.href = "/login";
       }
 
-      // ✅ Resolve with safe axios-like object so `fetchDataFromApi` returns `null`
+      // ✅ Resolve with safe axios-like object so helpers get `null`
       return Promise.resolve({ data: null });
     }
 
@@ -89,7 +96,7 @@ api.interceptors.response.use(
 export async function fetchDataFromApi(url, opts = {}) {
   const { params, signal, headers } = opts;
   const res = await api.get(url, { params, signal, headers });
-  return res.data;
+  return safeData(res);
 }
 
 // POST (JSON or FormData)
@@ -106,7 +113,7 @@ export async function postData(url, body, opts = {}) {
       ...(isFormData ? {} : { "Content-Type": "application/json" }),
     },
   });
-  return res.data;
+  return safeData(res);
 }
 
 // PUT
@@ -123,14 +130,14 @@ export async function editData(url, body, opts = {}) {
       ...(isFormData ? {} : { "Content-Type": "application/json" }),
     },
   });
-  return res.data;
+  return safeData(res);
 }
 
 // DELETE (no body)
 export async function deleteData(url, opts = {}) {
   const { params, signal, headers } = opts;
   const res = await api.delete(url, { params, signal, headers });
-  return res.data;
+  return safeData(res);
 }
 
 // DELETE (with body – e.g. delete image)
@@ -142,7 +149,7 @@ export async function deleteImages(url, body = {}, opts = {}) {
     headers,
     data: body,
   });
-  return res.data;
+  return safeData(res);
 }
 
 // Multipart upload (images, etc.)
@@ -156,7 +163,7 @@ export async function uploadImage(url, formData, opts = {}) {
       // Let axios set correct multipart boundary for FormData
     },
   });
-  return res.data;
+  return safeData(res);
 }
 
 export default api;

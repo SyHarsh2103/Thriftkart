@@ -5,6 +5,11 @@ const router = express.Router();
 const ReturnRequest = require("../models/ReturnRequest");
 const { Orders } = require("../models/orders");
 
+// 🔹 Shiprocket helpers for reverse pickup
+const {
+  createShiprocketReversePickup,
+} = require("../utils/shiprocket");
+
 // Helper: validate return window and status
 function canCreateReturn(order) {
   if (!order) return { ok: false, msg: "Order not found" };
@@ -39,7 +44,7 @@ router.post("/", async (req, res) => {
         .json({ success: false, message: "Unauthorized (no user in token)" });
     }
 
-    const { orderId, reason, description } = req.body;
+    const { orderId, reason, description, resolution } = req.body;
 
     if (!orderId || !reason) {
       return res
@@ -84,9 +89,9 @@ router.post("/", async (req, res) => {
       user: userId,
       reason,
       description,
+      resolution, // may be undefined, that's fine
       status: "pending",
       items: itemsSnapshot,
-      // requestedAt is not in schema; frontend will fall back to createdAt
       requestedAt: new Date(),
     });
 
@@ -136,21 +141,29 @@ router.get("/", async (req, res) => {
       .lean();
 
     // Shape data for frontend (admin + client)
-    const data = requests.map((rr) => ({
-      ...rr,
-      // For admin UI: human-friendly order number
-      orderNumber: rr.order?.orderId, // e.g. "TKOR1234"
+    const data = requests.map((rr) => {
+      const order = rr.order || null;
+      const user = rr.user || null;
 
-      // For admin UI: expects rr.orderId & rr.userId objects
-      orderId: rr.order || null, // populated order doc
-      userId: rr.user || null,   // populated user doc
+      return {
+        ...rr,
+        // For admin UI: human-friendly order number
+        orderNumber: order?.orderId || order?._id || rr._id,
 
-      // Prefer stored items snapshot; fallback to order products
-      items:
-        Array.isArray(rr.items) && rr.items.length
-          ? rr.items
-          : rr.order?.products || [],
-    }));
+        // For admin UI: expects rr.orderId & rr.userId objects
+        orderId: order,
+        userId: user,
+
+        // What to display in "Resolution" column
+        resolution: rr.resolution || rr.description || "",
+
+        // Prefer stored items snapshot; fallback to order products
+        items:
+          Array.isArray(rr.items) && rr.items.length
+            ? rr.items
+            : order?.products || [],
+      };
+    });
 
     return res.json({
       success: true,
@@ -181,21 +194,25 @@ router.get("/my", async (req, res) => {
     const requests = await ReturnRequest.find({ user: userId })
       .populate({
         path: "order",
-        select: "orderId amount status date",
+        select: "orderId amount status date products",
       })
       .sort({ createdAt: -1 })
       .lean();
 
-    const data = requests.map((rr) => ({
-      ...rr,
-      orderNumber: rr.order?.orderId,
-      // keep orderId as full order object if frontend needs more later
-      orderId: rr.order || null,
-      items:
-        Array.isArray(rr.items) && rr.items.length
-          ? rr.items
-          : rr.order?.products || [],
-    }));
+    const data = requests.map((rr) => {
+      const order = rr.order || null;
+
+      return {
+        ...rr,
+        orderNumber: order?.orderId || order?._id || rr._id,
+        orderId: order,
+        resolution: rr.resolution || rr.description || "",
+        items:
+          Array.isArray(rr.items) && rr.items.length
+            ? rr.items
+            : order?.products || [],
+      };
+    });
 
     return res.json({
       success: true,
@@ -216,6 +233,9 @@ router.get("/my", async (req, res) => {
  *   pending | approved | rejected |
  *   pickup_scheduled | picked |
  *   refund_initiated | refund_completed | closed
+ *
+ * 🔹 When status becomes "pickup_scheduled", we auto-create a
+ * Shiprocket reverse pickup shipment and store it in rr.reversePickup.
  */
 async function updateReturnStatus(req, res) {
   try {
@@ -224,7 +244,7 @@ async function updateReturnStatus(req, res) {
       return res.status(403).json({ success: false, message: "Admin only" });
     }
 
-    const { status, adminComment } = req.body;
+    const { status, adminComment, resolution, refundAmount } = req.body;
     const allowed = [
       "pending",
       "approved",
@@ -249,8 +269,63 @@ async function updateReturnStatus(req, res) {
         .json({ success: false, message: "Return request not found" });
     }
 
+    const previousStatus = rr.status;
+
+    // Basic field updates
     rr.status = status;
-    if (adminComment) rr.adminComment = adminComment;
+    if (adminComment !== undefined) rr.adminComment = adminComment;
+    if (resolution !== undefined) rr.resolution = resolution;
+    if (refundAmount !== undefined) rr.refundAmount = refundAmount;
+
+    // 🔹 Auto-create Shiprocket reverse pickup when moving to pickup_scheduled
+    if (
+      status === "pickup_scheduled" &&
+      previousStatus !== "pickup_scheduled"
+    ) {
+      try {
+        // Avoid double-creating reverse pickup
+        if (rr.reversePickup && rr.reversePickup.enabled) {
+          console.log(
+            `ℹ️ Reverse pickup already exists for return ${rr._id}, skipping`
+          );
+        } else {
+          const order = await Orders.findById(rr.order);
+          if (!order) {
+            console.error(
+              `❌ Cannot create reverse pickup: order ${rr.order} not found`
+            );
+          } else {
+            const reverseInfo = await createShiprocketReversePickup(order, {
+              reason: rr.reason,
+              comment: rr.description,
+            });
+
+            rr.reversePickup = reverseInfo;
+            console.log(
+              `✅ Shiprocket reverse pickup created for return ${rr._id}`,
+              reverseInfo
+            );
+          }
+        }
+      } catch (shipErr) {
+        console.error(
+          `❌ Failed to create Shiprocket reverse pickup for return ${rr._id}:`,
+          shipErr.message || shipErr
+        );
+        // Do NOT fail the whole API call – admin status change still succeeds
+        // Optionally append a note:
+        if (!rr.adminComment) {
+          rr.adminComment =
+            "Reverse pickup creation failed – see server logs for details.";
+        } else if (
+          !rr.adminComment.includes("Reverse pickup creation failed")
+        ) {
+          rr.adminComment +=
+            " | Reverse pickup creation failed – see server logs.";
+        }
+      }
+    }
+
     await rr.save();
 
     return res.json({

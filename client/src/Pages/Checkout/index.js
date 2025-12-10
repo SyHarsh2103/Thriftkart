@@ -118,17 +118,19 @@ const Checkout = () => {
     return true;
   };
 
+  // ✅ Build full address info (used by both Online & COD)
   const buildAddressInfo = () => ({
     name: formFields.fullName,
     phoneNumber: formFields.phoneNumber,
     address:
-      formFields.streetAddressLine1 + " " + (formFields.streetAddressLine2 || ""),
+      formFields.streetAddressLine1 +
+      (formFields.streetAddressLine2 ? ` ${formFields.streetAddressLine2}` : ""),
     pincode: formFields.zipCode,
-    date: new Date().toLocaleString("en-US", {
-      month: "short",
-      day: "2-digit",
-      year: "numeric",
-    }),
+    city: formFields.city,
+    state: formFields.state,
+    country: formFields.country,
+    // Use a real Date object – Mongoose will handle this nicely
+    date: new Date(),
   });
 
   const clearCartAndGoToOrders = async () => {
@@ -152,7 +154,7 @@ const Checkout = () => {
     }
   };
 
-  // ---------------- Razorpay Checkout ----------------
+  // ---------------- Razorpay Checkout (ONLINE) ----------------
   const checkout = async (e) => {
     e.preventDefault();
     if (!validateAddress()) return;
@@ -203,7 +205,10 @@ const Checkout = () => {
         handler: async (response) => {
           try {
             // Step 2: Verify signature
-            const verifyRes = await postData("/api/orders/verify-payment", response);
+            const verifyRes = await postData(
+              "/api/orders/verify-payment",
+              response
+            );
 
             if (!verifyRes?.success) {
               context.setAlertBox({
@@ -218,14 +223,18 @@ const Checkout = () => {
             // Step 3: Save order in DB (backend will set userid from token)
             const payLoad = {
               name: addressInfo.name,
-              phoneNumber: formFields.phoneNumber,
+              phoneNumber: addressInfo.phoneNumber,
               address: addressInfo.address,
               pincode: addressInfo.pincode,
+              city: addressInfo.city,
+              state: addressInfo.state,
+              country: addressInfo.country,
               amount: parseInt(totalAmount, 10),
               subtotal: parseInt(subtotal, 10),
               tax: parseInt(taxAmount, 10),
               paymentId: response.razorpay_payment_id,
-              paymentType: "Online",
+              // UPPERCASE to play nicely with Shiprocket mapping
+              paymentType: "ONLINE",
               email: formFields.email,
               products: cartData,
               date: addressInfo.date,
@@ -267,7 +276,7 @@ const Checkout = () => {
     }
   };
 
-  // ---------------- Cash On Delivery ----------------
+  // ---------------- Cash On Delivery (COD) ----------------
   const cashOnDelivery = async (e) => {
     e.preventDefault();
     if (!validateAddress()) return;
@@ -279,13 +288,17 @@ const Checkout = () => {
 
       const payLoad = {
         name: addressInfo.name,
-        phoneNumber: formFields.phoneNumber,
+        phoneNumber: addressInfo.phoneNumber,
         address: addressInfo.address,
         pincode: addressInfo.pincode,
+        city: addressInfo.city,
+        state: addressInfo.state,
+        country: addressInfo.country,
         amount: parseInt(totalAmount, 10),
         subtotal: parseInt(subtotal, 10),
         tax: parseInt(taxAmount, 10),
         paymentId: null,
+        // UPPERCASE so backend + Shiprocket see it as COD
         paymentType: "COD",
         email: formFields.email,
         products: cartData,
@@ -434,17 +447,17 @@ const Checkout = () => {
                         cartData?.map((item, index) => (
                           <tr key={index}>
                             <td>
-                              {(item?.productTitle || "").substr(0, 20) + "..."}{" "}
+                              {(item?.productTitle || "").substr(0, 20) +
+                                "..."}{" "}
                               <b>× {item?.quantity}</b>
                             </td>
                             <td>
-                              {(parseInt(item.price, 10) * item.quantity)?.toLocaleString(
-                                "en-US",
-                                {
-                                  style: "currency",
-                                  currency: "INR",
-                                }
-                              )}
+                              {(
+                                parseInt(item.price, 10) * item.quantity
+                              )?.toLocaleString("en-US", {
+                                style: "currency",
+                                currency: "INR",
+                              })}
                             </td>
                           </tr>
                         ))}

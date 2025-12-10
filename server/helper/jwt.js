@@ -10,7 +10,7 @@ function authJwt() {
     process.exit(1);
   }
 
-  // Routes that do NOT require JWT
+  // Base public routes (no auth required)
   const publicPaths = [
     // ---------- Auth + account lifecycle ----------
     { url: /\/api\/user\/signup/, methods: ["POST"] },
@@ -36,17 +36,19 @@ function authJwt() {
     // ---------- Static files ----------
     { url: /\/uploads\/.*/, methods: ["GET"] },
 
-    // ---------- Health check (still guarded in index.js) ----------
-    { url: /\/check-apis/, methods: ["GET"] },
-
     // ---------- CORS preflight – allow all OPTIONS without token ----------
     { url: /.*/, methods: ["OPTIONS"] },
   ];
 
+  // Health check route: only public in non-production
+  if (NODE_ENV !== "production") {
+    publicPaths.push({ url: /^\/check-apis$/, methods: ["GET"] });
+  }
+
   return jwt({
     secret,
     algorithms: ["HS256"],
-    requestProperty: "auth", // token data → req.auth
+    requestProperty: "auth", // token payload → req.auth
   }).unless({ path: publicPaths });
 }
 
