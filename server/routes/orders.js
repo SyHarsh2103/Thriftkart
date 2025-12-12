@@ -1,4 +1,3 @@
-// server/routes/orders.js
 const express = require("express");
 const { Orders } = require("../models/orders");
 const Razorpay = require("razorpay");
@@ -33,6 +32,18 @@ function requireAdmin(req, res) {
     return false;
   }
   return true;
+}
+
+// 🔹 Safely extract user id from JWT payload (req.auth)
+function getUserIdFromToken(auth) {
+  if (!auth) return null;
+
+  if (auth.id) return auth.id;       // most likely in your app
+  if (auth.userId) return auth.userId;
+  if (auth._id) return auth._id;
+  if (auth.sub) return auth.sub;
+
+  return null;
 }
 
 // ===== Razorpay init =====
@@ -128,25 +139,45 @@ router.get(`/sales`, async (req, res) => {
 // ================ ORDER LISTING ======================
 // =====================================================
 
-// GET all orders
-// - Admin: can see all orders, optional filters via query (allowlisted)
-// - Normal user: sees ONLY their own orders, ignoring filters
+// GET orders
+// - Default: ONLY current user's orders (even if isAdmin = true)
+// - Admin listing: /api/orders?adminMode=1 → can see all, with filters
 router.get(`/`, async (req, res) => {
   if (!requireAuth(req, res)) return;
 
   try {
+    const userId = getUserIdFromToken(req.auth);
+
+    // Is this an explicit "admin listing" request?
+    const isAdminMode =
+      req.auth.isAdmin &&
+      (req.query.adminMode === "1" ||
+        req.query.adminMode === "true" ||
+        req.query.scope === "all");
+
     let filter = {};
 
-    if (req.auth.isAdmin) {
-      filter = {};
+    if (isAdminMode) {
+      // 🔓 Admin mode: allow filtering via whitelisted fields
       for (const key of Object.keys(req.query || {})) {
         if (ADMIN_FILTER_FIELDS.includes(key)) {
           filter[key] = req.query[key];
         }
       }
     } else {
-      // Normal user: force filter to own orders only
-      filter = { userid: req.auth.id };
+      // 🔐 Normal "My Orders" – ALWAYS filter by logged-in user
+      if (!userId) {
+        return res
+          .status(400)
+          .json({ error: true, msg: "Cannot determine user id from token" });
+      }
+
+      filter = {
+        $or: [
+          { userid: userId }, // your existing field
+          { userId: userId }, // in case older docs used this
+        ],
+      };
     }
 
     const ordersList = await Orders.find(filter).sort({ date: -1 });
@@ -174,7 +205,9 @@ router.get("/:id", async (req, res) => {
         .json({ message: "The order with the given ID was not found." });
     }
 
-    if (!req.auth.isAdmin && String(order.userid) !== String(req.auth.id)) {
+    const userId = getUserIdFromToken(req.auth);
+
+    if (!req.auth.isAdmin && String(order.userid) !== String(userId)) {
       return res.status(403).json({ error: true, msg: "Forbidden" });
     }
 
@@ -266,6 +299,13 @@ router.post("/create", async (req, res) => {
   if (!requireAuth(req, res)) return;
 
   try {
+    const userId = getUserIdFromToken(req.auth);
+    if (!userId) {
+      return res
+        .status(400)
+        .json({ success: false, msg: "Cannot determine user id" });
+    }
+
     const {
       name,
       phoneNumber,
@@ -308,7 +348,7 @@ router.post("/create", async (req, res) => {
       paymentId,
       paymentType: paymentType || "ONLINE",
       email,
-      userid: req.auth.id, // 👈 always from token, not body
+      userid: userId, // 👈 from token, not body
       products,
       date: date || new Date(),
     });
@@ -340,6 +380,13 @@ router.post("/cod/create", async (req, res) => {
   if (!requireAuth(req, res)) return;
 
   try {
+    const userId = getUserIdFromToken(req.auth);
+    if (!userId) {
+      return res
+        .status(400)
+        .json({ success: false, msg: "Cannot determine user id" });
+    }
+
     const {
       name,
       phoneNumber,
@@ -381,7 +428,7 @@ router.post("/cod/create", async (req, res) => {
       paymentId: null,
       paymentType: paymentType || "COD",
       email,
-      userid: req.auth.id, // 👈 always from token
+      userid: userId, // 👈 from token
       products,
       date: date || new Date(),
     });
@@ -514,7 +561,7 @@ router.post("/create-razorpay-order", razorpayLimiter, async (req, res) => {
       currency: currency || "INR",
       receipt: "receipt_" + Date.now(),
       notes: {
-        userId: req.auth.id,
+        userId: getUserIdFromToken(req.auth),
       },
     };
 

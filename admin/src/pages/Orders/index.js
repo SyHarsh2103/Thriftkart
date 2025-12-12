@@ -101,7 +101,11 @@ const Orders = () => {
     const loadOrders = async () => {
       try {
         context.setProgress?.(30);
-        const res = await fetchDataFromApi(`/api/orders`);
+
+        // 🔴 OLD:
+        // const res = await fetchDataFromApi(`/api/orders`);
+        // 🟢 NEW: explicit adminMode so backend returns ALL orders
+        const res = await fetchDataFromApi(`/api/orders?adminMode=1`);
 
         if (!Array.isArray(res)) {
           context.setAlertBox({
@@ -178,7 +182,11 @@ const Orders = () => {
           msg: updateRes?.msg || "Failed to update order status.",
         });
       } else {
-        const refreshed = await fetchDataFromApi(`/api/orders`);
+        // 🔴 OLD:
+        // const refreshed = await fetchDataFromApi(`/api/orders`);
+        // 🟢 NEW: keep adminMode=1 so admin still sees all orders
+        const refreshed = await fetchDataFromApi(`/api/orders?adminMode=1`);
+
         if (Array.isArray(refreshed)) {
           setOrders(refreshed);
         }

@@ -26,7 +26,6 @@ const ProductDetails = () => {
   const [tabError, setTabError] = useState(false);
 
   const { id } = useParams();
-  console.log("👉 ProductDetails param id:", id);
   const context = useContext(MyContext);
 
   const isActive = (index) => {
@@ -81,7 +80,7 @@ const ProductDetails = () => {
     });
 
     context.setEnableFilterTab(false);
-  }, [id]);
+  }, [id, context]);
 
   const [rating, setRating] = useState(1);
   const [reviews, setReviews] = useState({
@@ -160,7 +159,7 @@ const ProductDetails = () => {
         rating: productData?.rating,
         price: productData?.price,
         quantity: productQuantity,
-        subTotal: parseInt(productData?.price * productQuantity),
+        subTotal: parseInt(productData?.price * productQuantity, 10),
         productId: productData?.id,
         countInStock: productData?.countInStock,
         userId: user?.userId,
@@ -176,7 +175,7 @@ const ProductDetails = () => {
     setActiveTabs(2);
   };
 
-  const addToMyList = (id) => {
+  const addToMyList = (idVal) => {
     const user = JSON.parse(localStorage.getItem("user"));
     if (user) {
       const data = {
@@ -184,7 +183,7 @@ const ProductDetails = () => {
         image: productData?.images?.[0],
         rating: productData?.rating,
         price: productData?.price,
-        productId: id,
+        productId: idVal,
         userId: user?.userId,
       };
       postData(`/api/my-list/add/`, data).then((res) => {
@@ -195,7 +194,7 @@ const ProductDetails = () => {
             msg: "The product was added to your wishlist",
           });
           fetchDataFromApi(
-            `/api/my-list?productId=${id}&userId=${user?.userId}`
+            `/api/my-list?productId=${idVal}&userId=${user?.userId}`
           ).then((r) => {
             if (r?.length !== 0) {
               setSsAddedToMyList(true);
@@ -235,27 +234,31 @@ const ProductDetails = () => {
 
             <div className="col-md-7 pl-5 pr-5 part2">
               <h2 className="hd text-capitalize">{productData?.name}</h2>
+
               <ul className="list list-inline d-flex align-items-center">
                 <li className="list-inline-item">
                   <span className="text-light mr-2">Brand:</span>
-                  <span>{productData?.brand}</span>
+                  <span>{productData?.brand || "N/A"}</span>
                 </li>
                 <li className="list-inline-item">
                   <Rating
                     name="read-only"
-                    value={parseInt(productData?.rating)}
+                    value={parseInt(productData?.rating || 0, 10)}
                     precision={0.5}
                     readOnly
                     size="small"
                   />
                   <span className="text-light cursor ml-2" onClick={gotoReviews}>
                     {reviewsData?.length} Review
+                    {reviewsData?.length === 1 ? "" : "s"}
                   </span>
                 </li>
               </ul>
 
               <div className="d-flex info mb-3">
-                <span className="oldPrice">Rs: {productData?.oldPrice}</span>
+                {productData?.oldPrice && (
+                  <span className="oldPrice">Rs: {productData?.oldPrice}</span>
+                )}
                 <span className="netPrice text-danger ml-2">
                   Rs: {productData?.price}
                 </span>
@@ -267,11 +270,9 @@ const ProductDetails = () => {
                 <span className="badge badge-danger">OUT OF STOCK</span>
               )}
 
-              <p className="mt-3">{productData?.description}</p>
-
               {/* Options */}
               {productData?.productRam?.length > 0 && (
-                <div className="productSize d-flex align-items-center">
+                <div className="productSize d-flex align-items-center mt-3">
                   <span>RAM:</span>
                   <ul
                     className={`list list-inline mb-0 pl-4 ${
@@ -280,14 +281,15 @@ const ProductDetails = () => {
                   >
                     {productData.productRam.map((item, index) => (
                       <li className="list-inline-item" key={index}>
-                        <a
+                        <button
+                          type="button"
                           className={`tag ${
                             activeSize === index ? "active" : ""
                           }`}
                           onClick={() => isActive(index)}
                         >
                           {item}
-                        </a>
+                        </button>
                       </li>
                     ))}
                   </ul>
@@ -295,7 +297,7 @@ const ProductDetails = () => {
               )}
 
               {productData?.size?.length > 0 && (
-                <div className="productSize d-flex align-items-center">
+                <div className="productSize d-flex align-items-center mt-2">
                   <span>Size:</span>
                   <ul
                     className={`list list-inline mb-0 pl-4 ${
@@ -304,14 +306,15 @@ const ProductDetails = () => {
                   >
                     {productData.size.map((item, index) => (
                       <li className="list-inline-item" key={index}>
-                        <a
+                        <button
+                          type="button"
                           className={`tag ${
                             activeSize === index ? "active" : ""
                           }`}
                           onClick={() => isActive(index)}
                         >
                           {item}
-                        </a>
+                        </button>
                       </li>
                     ))}
                   </ul>
@@ -319,7 +322,7 @@ const ProductDetails = () => {
               )}
 
               {productData?.productWeight?.length > 0 && (
-                <div className="productSize d-flex align-items-center">
+                <div className="productSize d-flex align-items-center mt-2">
                   <span>Weight:</span>
                   <ul
                     className={`list list-inline mb-0 pl-4 ${
@@ -328,14 +331,15 @@ const ProductDetails = () => {
                   >
                     {productData.productWeight.map((item, index) => (
                       <li className="list-inline-item" key={index}>
-                        <a
+                        <button
+                          type="button"
                           className={`tag ${
                             activeSize === index ? "active" : ""
                           }`}
                           onClick={() => isActive(index)}
                         >
                           {item}
-                        </a>
+                        </button>
                       </li>
                     ))}
                   </ul>
@@ -357,7 +361,9 @@ const ProductDetails = () => {
                     {context.addingInCart ? "adding..." : "Add to cart"}
                   </Button>
                   <Tooltip
-                    title={isAddedToMyList ? "Added to Wishlist" : "Add to Wishlist"}
+                    title={
+                      isAddedToMyList ? "Added to Wishlist" : "Add to Wishlist"
+                    }
                   >
                     <Button
                       className="btn-blue btn-lg btn-big btn-circle ml-4"
@@ -416,12 +422,57 @@ const ProductDetails = () => {
             <br />
 
             {activeTabs === 0 && (
-              <div className="tabContent">{productData?.description}</div>
+              <div className="tabContent">
+                {productData?.description ? (
+                  <p>{productData.description}</p>
+                ) : (
+                  <p>No description available for this product.</p>
+                )}
+              </div>
             )}
 
             {activeTabs === 1 && (
               <div className="tabContent">
-                <p>Additional product information goes here.</p>
+                <div className="table-responsive">
+                  <table className="table table-sm table-bordered">
+                    <tbody>
+                      {productData?.brand && (
+                        <tr>
+                          <th style={{ width: "30%" }}>Brand</th>
+                          <td>{productData.brand}</td>
+                        </tr>
+                      )}
+
+                      {productData?.productRam?.length > 0 && (
+                        <tr>
+                          <th>RAM</th>
+                          <td>{productData.productRam.join(", ")}</td>
+                        </tr>
+                      )}
+
+                      {productData?.size?.length > 0 && (
+                        <tr>
+                          <th>Size</th>
+                          <td>{productData.size.join(", ")}</td>
+                        </tr>
+                      )}
+
+                      {productData?.productWeight?.length > 0 && (
+                        <tr>
+                          <th>Weight</th>
+                          <td>{productData.productWeight.join(", ")}</td>
+                        </tr>
+                      )}
+
+                      {productData?.countInStock !== undefined && (
+                        <tr>
+                          <th>Stock</th>
+                          <td>{productData.countInStock}</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
 

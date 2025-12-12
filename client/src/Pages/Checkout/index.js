@@ -24,12 +24,12 @@ const Checkout = () => {
 
   const [cartData, setCartData] = useState([]);
   const [subtotal, setSubtotal] = useState(0);
-  const [taxAmount, setTaxAmount] = useState(0);
-  const [totalAmount, setTotalAmount] = useState(0);
+  const [totalAmount, setTotalAmount] = useState(0); // ✅ total = subtotal (inclusive)
 
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
 
-  const TAX_PERCENTAGE = 0.18; // 18% GST
+  // ✅ Payment mode: "ONLINE" or "COD"
+  const [paymentMode, setPaymentMode] = useState("ONLINE");
 
   // ✅ On mount: require login + load cart
   useEffect(() => {
@@ -76,14 +76,10 @@ const Checkout = () => {
         .map((item) => parseInt(item.price, 10) * item.quantity)
         .reduce((total, value) => total + value, 0);
 
-      const tax = sub * TAX_PERCENTAGE;
-
       setSubtotal(sub);
-      setTaxAmount(tax);
-      setTotalAmount(sub + tax);
+      setTotalAmount(sub); // ✅ inclusive: total == subtotal
     } else {
       setSubtotal(0);
-      setTaxAmount(0);
       setTotalAmount(0);
     }
   }, [cartData]);
@@ -98,7 +94,8 @@ const Checkout = () => {
 
   const validateAddress = () => {
     for (const [key, value] of Object.entries(formFields)) {
-      if (!value && key !== "streetAddressLine2") {
+      // email + streetAddressLine2 are OPTIONAL
+      if (!value && key !== "streetAddressLine2" && key !== "email") {
         context.setAlertBox({
           open: true,
           error: true,
@@ -129,7 +126,6 @@ const Checkout = () => {
     city: formFields.city,
     state: formFields.state,
     country: formFields.country,
-    // Use a real Date object – Mongoose will handle this nicely
     date: new Date(),
   });
 
@@ -155,8 +151,7 @@ const Checkout = () => {
   };
 
   // ---------------- Razorpay Checkout (ONLINE) ----------------
-  const checkout = async (e) => {
-    e.preventDefault();
+  const checkoutOnline = async () => {
     if (!validateAddress()) return;
 
     if (!window.Razorpay) {
@@ -172,6 +167,7 @@ const Checkout = () => {
 
     try {
       const addressInfo = buildAddressInfo();
+      const emailToUse = formFields.email?.trim() || "NA";
 
       // Step 1: Ask backend to create Razorpay order
       const orderData = await postData("/api/orders/create-razorpay-order", {
@@ -199,7 +195,7 @@ const Checkout = () => {
         image: "/logo.png",
         prefill: {
           name: formFields.fullName,
-          email: formFields.email,
+          email: formFields.email || undefined, // optional
           contact: formFields.phoneNumber,
         },
         handler: async (response) => {
@@ -231,11 +227,10 @@ const Checkout = () => {
               country: addressInfo.country,
               amount: parseInt(totalAmount, 10),
               subtotal: parseInt(subtotal, 10),
-              tax: parseInt(taxAmount, 10),
+              tax: 0, // ✅ inclusive pricing
               paymentId: response.razorpay_payment_id,
-              // UPPERCASE to play nicely with Shiprocket mapping
               paymentType: "ONLINE",
-              email: formFields.email,
+              email: emailToUse, // ✅ "NA" if empty
               products: cartData,
               date: addressInfo.date,
             };
@@ -277,14 +272,14 @@ const Checkout = () => {
   };
 
   // ---------------- Cash On Delivery (COD) ----------------
-  const cashOnDelivery = async (e) => {
-    e.preventDefault();
+  const cashOnDelivery = async () => {
     if (!validateAddress()) return;
 
     setIsPlacingOrder(true);
 
     try {
       const addressInfo = buildAddressInfo();
+      const emailToUse = formFields.email?.trim() || "NA";
 
       const payLoad = {
         name: addressInfo.name,
@@ -296,16 +291,14 @@ const Checkout = () => {
         country: addressInfo.country,
         amount: parseInt(totalAmount, 10),
         subtotal: parseInt(subtotal, 10),
-        tax: parseInt(taxAmount, 10),
+        tax: 0, // ✅ inclusive pricing
         paymentId: null,
-        // UPPERCASE so backend + Shiprocket see it as COD
         paymentType: "COD",
-        email: formFields.email,
+        email: emailToUse, // ✅ "NA" if empty
         products: cartData,
         date: addressInfo.date,
       };
 
-      // 🔐 Use dedicated COD route (backend sets userid from token)
       await postData("/api/orders/cod/create", payLoad);
 
       context.setAlertBox({
@@ -324,6 +317,26 @@ const Checkout = () => {
       });
     } finally {
       setIsPlacingOrder(false);
+    }
+  };
+
+  // ---------------- Single Place Order Button ----------------
+  const handlePlaceOrder = async (e) => {
+    e.preventDefault();
+
+    if (!paymentMode) {
+      context.setAlertBox({
+        open: true,
+        error: true,
+        msg: "Please select a payment method",
+      });
+      return;
+    }
+
+    if (paymentMode === "ONLINE") {
+      await checkoutOnline();
+    } else if (paymentMode === "COD") {
+      await cashOnDelivery();
     }
   };
 
@@ -419,7 +432,7 @@ const Checkout = () => {
                 </div>
                 <div className="col-md-6">
                   <TextField
-                    label="Email Address"
+                    label="Email Address (optional)"
                     variant="outlined"
                     className="w-100"
                     size="small"
@@ -462,29 +475,7 @@ const Checkout = () => {
                           </tr>
                         ))}
 
-                      <tr>
-                        <td>
-                          <b>Subtotal</b>
-                        </td>
-                        <td>
-                          {subtotal?.toLocaleString("en-US", {
-                            style: "currency",
-                            currency: "INR",
-                          })}
-                        </td>
-                      </tr>
-
-                      <tr>
-                        <td>
-                          <b>Tax (18%)</b>
-                        </td>
-                        <td>
-                          {taxAmount?.toLocaleString("en-US", {
-                            style: "currency",
-                            currency: "INR",
-                          })}
-                        </td>
-                      </tr>
+                      {/* ❌ Removed separate Subtotal row from UI */}
 
                       <tr>
                         <td>
@@ -501,21 +492,58 @@ const Checkout = () => {
                   </table>
                 </div>
 
+                {/* 🔹 Note: total is inclusive of taxes */}
+                <p
+                  className="mt-1 mb-3 text-muted"
+                  style={{ fontSize: "0.85rem" }}
+                >
+                  Including taxes
+                </p>
+
+                {/* 🔹 Payment Method Selection (Checkbox style, but mutually exclusive) */}
+                <div className="mt-2 mb-3">
+                  <div className="form-check">
+                    <input
+                      type="checkbox"
+                      className="form-check-input"
+                      id="paymentOnline"
+                      checked={paymentMode === "ONLINE"}
+                      onChange={() => setPaymentMode("ONLINE")}
+                    />
+                    <label
+                      className="form-check-label"
+                      htmlFor="paymentOnline"
+                    >
+                      Pay Online
+                    </label>
+                  </div>
+
+                  <div className="form-check mt-1">
+                    <input
+                      type="checkbox"
+                      className="form-check-input"
+                      id="paymentCOD"
+                      checked={paymentMode === "COD"}
+                      onChange={() => setPaymentMode("COD")}
+                    />
+                    <label className="form-check-label" htmlFor="paymentCOD">
+                      Cash On Delivery
+                    </label>
+                  </div>
+                </div>
+
+                {/* 🔹 Single button for both payment options */}
                 <Button
-                  onClick={checkout}
+                  onClick={handlePlaceOrder}
                   disabled={isPlacingOrder || !cartData.length}
                   className="btn-blue bg-red btn-lg btn-big"
                 >
                   <IoBagCheckOutline /> &nbsp;
-                  {isPlacingOrder ? "Processing..." : "Pay Online"}
-                </Button>
-                <Button
-                  onClick={cashOnDelivery}
-                  disabled={isPlacingOrder || !cartData.length}
-                  className="btn-blue bg-red btn-lg btn-big mt-3"
-                >
-                  <IoBagCheckOutline /> &nbsp;
-                  {isPlacingOrder ? "Processing..." : "Cash On Delivery"}
+                  {isPlacingOrder
+                    ? "Processing..."
+                    : paymentMode === "ONLINE"
+                    ? "Pay Online"
+                    : "Place Order (COD)"}
                 </Button>
               </div>
             </div>
