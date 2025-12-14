@@ -19,7 +19,6 @@ const Checkout = () => {
     state: "",
     zipCode: "",
     phoneNumber: "",
-    email: "",
   });
 
   const [cartData, setCartData] = useState([]);
@@ -30,6 +29,9 @@ const Checkout = () => {
 
   // ✅ Payment mode: "ONLINE" or "COD"
   const [paymentMode, setPaymentMode] = useState("ONLINE");
+
+  // ✅ Email from login session (localStorage user)
+  const [sessionEmail, setSessionEmail] = useState("");
 
   // ✅ On mount: require login + load cart
   useEffect(() => {
@@ -57,6 +59,11 @@ const Checkout = () => {
       navigate("/signIn");
       return;
     }
+
+    // 🔹 Get email internally from session (NO fallback to 'NA')
+    const emailFromUser =
+      user?.email || user?.userEmail || user?.username || "";
+    setSessionEmail(emailFromUser || "");
 
     fetchDataFromApi(`/api/cart?userId=${user.userId}`)
       .then((res) => setCartData(res || []))
@@ -94,8 +101,8 @@ const Checkout = () => {
 
   const validateAddress = () => {
     for (const [key, value] of Object.entries(formFields)) {
-      // email + streetAddressLine2 are OPTIONAL
-      if (!value && key !== "streetAddressLine2" && key !== "email") {
+      // streetAddressLine2 is OPTIONAL
+      if (!value && key !== "streetAddressLine2") {
         context.setAlertBox({
           open: true,
           error: true,
@@ -109,6 +116,19 @@ const Checkout = () => {
         open: true,
         error: true,
         msg: "Your cart is empty",
+      });
+      return false;
+    }
+    return true;
+  };
+
+  // ✅ Ensure Shiprocket-required email is present
+  const ensureEmailPresent = () => {
+    if (!sessionEmail || !sessionEmail.trim()) {
+      context.setAlertBox({
+        open: true,
+        error: true,
+        msg: "Email address is missing in your account. Please update your profile or re-login before placing the order (required for shipping).",
       });
       return false;
     }
@@ -153,6 +173,7 @@ const Checkout = () => {
   // ---------------- Razorpay Checkout (ONLINE) ----------------
   const checkoutOnline = async () => {
     if (!validateAddress()) return;
+    if (!ensureEmailPresent()) return; // 🚫 block if no email
 
     if (!window.Razorpay) {
       context.setAlertBox({
@@ -167,7 +188,7 @@ const Checkout = () => {
 
     try {
       const addressInfo = buildAddressInfo();
-      const emailToUse = formFields.email?.trim() || "NA";
+      const emailToUse = sessionEmail.trim();
 
       // Step 1: Ask backend to create Razorpay order
       const orderData = await postData("/api/orders/create-razorpay-order", {
@@ -195,7 +216,7 @@ const Checkout = () => {
         image: "/logo.png",
         prefill: {
           name: formFields.fullName,
-          email: formFields.email || undefined, // optional
+          email: emailToUse, // ✅ real email only
           contact: formFields.phoneNumber,
         },
         handler: async (response) => {
@@ -230,7 +251,7 @@ const Checkout = () => {
               tax: 0, // ✅ inclusive pricing
               paymentId: response.razorpay_payment_id,
               paymentType: "ONLINE",
-              email: emailToUse, // ✅ "NA" if empty
+              email: emailToUse, // ✅ real email only
               products: cartData,
               date: addressInfo.date,
             };
@@ -274,12 +295,13 @@ const Checkout = () => {
   // ---------------- Cash On Delivery (COD) ----------------
   const cashOnDelivery = async () => {
     if (!validateAddress()) return;
+    if (!ensureEmailPresent()) return; // 🚫 block if no email (Shiprocket)
 
     setIsPlacingOrder(true);
 
     try {
       const addressInfo = buildAddressInfo();
-      const emailToUse = formFields.email?.trim() || "NA";
+      const emailToUse = sessionEmail.trim();
 
       const payLoad = {
         name: addressInfo.name,
@@ -294,7 +316,7 @@ const Checkout = () => {
         tax: 0, // ✅ inclusive pricing
         paymentId: null,
         paymentType: "COD",
-        email: emailToUse, // ✅ "NA" if empty
+        email: emailToUse, // ✅ real email only
         products: cartData,
         date: addressInfo.date,
       };
@@ -430,16 +452,7 @@ const Checkout = () => {
                     onChange={onChangeInput}
                   />
                 </div>
-                <div className="col-md-6">
-                  <TextField
-                    label="Email Address (optional)"
-                    variant="outlined"
-                    className="w-100"
-                    size="small"
-                    name="email"
-                    onChange={onChangeInput}
-                  />
-                </div>
+                {/* Email is now fully internal – nothing here */}
               </div>
             </div>
 
@@ -474,8 +487,6 @@ const Checkout = () => {
                             </td>
                           </tr>
                         ))}
-
-                      {/* ❌ Removed separate Subtotal row from UI */}
 
                       <tr>
                         <td>
