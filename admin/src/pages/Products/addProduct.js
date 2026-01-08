@@ -107,7 +107,19 @@ const ProductUpload = () => {
   });
 
   useEffect(() => {
-    setCatData(context.catData);
+    // 🔹 Normalize category data from context
+    const rawCat = context.catData;
+    let catList = [];
+
+    if (Array.isArray(rawCat?.categoryList)) {
+      // case: { categoryList: [...] }
+      catList = rawCat.categoryList;
+    } else if (Array.isArray(rawCat)) {
+      // case: [...] directly
+      catList = rawCat;
+    }
+
+    setCatData(catList);
 
     // ✅ clean up temp uploads safely
     fetchDataFromApi("/api/imageUpload")
@@ -139,11 +151,13 @@ const ProductUpload = () => {
         console.error("imageUpload cleanup error:", err);
       });
 
-    // ✅ sub categories
+    // ✅ sub categories (handle both {subCategoryList: []} and [] directly)
     fetchDataFromApi("/api/subCat")
       .then((res) => {
         const list = Array.isArray(res?.subCategoryList)
           ? res.subCategoryList
+          : Array.isArray(res)
+          ? res
           : [];
         setSubCatData(list);
       })
@@ -515,7 +529,7 @@ const ProductUpload = () => {
                 <MenuItem value="">
                   <em>None</em>
                 </MenuItem>
-                {context.catData?.categoryList?.map((cat, index) => (
+                {catData?.map((cat, index) => (
                   <MenuItem
                     key={index}
                     value={cat._id}
@@ -537,7 +551,18 @@ const ProductUpload = () => {
                   <em>None</em>
                 </MenuItem>
                 {subCatData
-                  ?.filter((sc) => sc.category?._id === categoryVal)
+                  ?.filter((sc) => {
+                    // Try multiple possibilities for the category foreign key
+                    const catIdOfSub =
+                      sc.category?._id ||
+                      sc.categoryId ||
+                      sc.catId ||
+                      sc.cat_id ||
+                      sc.category;
+
+                    if (!catIdOfSub || !categoryVal) return false;
+                    return String(catIdOfSub) === String(categoryVal);
+                  })
                   .map((subCat, index) => (
                     <MenuItem
                       key={index}

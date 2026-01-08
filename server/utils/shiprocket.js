@@ -4,6 +4,7 @@
 // V3:
 //  - Forward shipment: creates a Shiprocket order from your Orders model (COD + Online)
 //  - Reverse pickup: creates a Shiprocket return shipment (reverse pickup)
+//  - Tracking refresh: fetch latest status for an existing shipment
 //  - Returns normalized "shippingInfo" objects that fit Orders.shiprocket
 //
 // NOTE: Reverse pickup payload (create/return) MUST be verified against
@@ -29,8 +30,11 @@ const axios = require("axios");
 const SHIPROCKET_BASE_URL =
   process.env.SHIPROCKET_BASE_URL || "https://apiv2.shiprocket.in/v1";
 
-const SHIPROCKET_EMAIL = process.env.SHIPROCKET_EMAIL || "thriftkart.info@gmail.com";
-const SHIPROCKET_PASSWORD = process.env.SHIPROCKET_PASSWORD || "lH0v#khD1Lp@4%Fg#LZ7f8*Qd%8fL@j@";
+const SHIPROCKET_EMAIL =
+  process.env.SHIPROCKET_EMAIL || "thriftkart.info@gmail.com";
+const SHIPROCKET_PASSWORD =
+  process.env.SHIPROCKET_PASSWORD ||
+  "lH0v#khD1Lp@4%Fg#LZ7f8*Qd%8fL@j@";
 
 const SHIPROCKET_PICKUP_LOCATION =
   process.env.SHIPROCKET_PICKUP_LOCATION || "Primary";
@@ -94,11 +98,8 @@ function buildShiprocketOrderPayload(orderDoc, extraOptions = {}) {
     throw new Error("orderDoc is required to build Shiprocket payload");
   }
 
-  const payType = (
-    extraOptions.paymentType ||
-    orderDoc.paymentType ||
-    ""
-  ).toUpperCase();
+  const payType =
+    (extraOptions.paymentType || orderDoc.paymentType || "").toUpperCase();
 
   // Shiprocket expects "COD" or "Prepaid"
   const paymentMethod = payType === "COD" ? "COD" : "Prepaid";
@@ -383,20 +384,6 @@ async function createShiprocketReversePickupRaw(orderDoc, extraOptions = {}) {
 /**
  * High-level helper to be used from Return Requests route when
  * admin sets status to "pickup_scheduled".
- *
- * Example usage in server/routes/returnRequests.js:
- *
- *   const { createShiprocketReversePickup } = require("../utils/shiprocket");
- *   ...
- *   if (status === "pickup_scheduled") {
- *     const order = await Orders.findById(rr.order);
- *     const reverseInfo = await createShiprocketReversePickup(order, {
- *       reason: rr.reason,
- *       comment: rr.description,
- *     });
- *     rr.reversePickup = reverseInfo;
- *     await rr.save();
- *   }
  */
 async function createShiprocketReversePickup(orderDoc, extraOptions = {}) {
   try {
@@ -467,6 +454,98 @@ async function createShiprocketReversePickup(orderDoc, extraOptions = {}) {
   }
 }
 
+// ========== Public API (tracking refresh) ==========
+
+/**
+ * Fetch latest tracking / status information for an existing shipment.
+ *
+ * Called from routes/orders.js like:
+ *   const tracking = await fetchShiprocketTrackingInfo({
+ *     shipment_id,
+ *     awb_code,
+ *     sr_order_id,
+ *   });
+ *
+ * Returns a normalized object:
+ * {
+ *   status,
+ *   awb_code,
+ *   courier,
+ *   tracking_url,
+ *   raw
+ * }
+ */
+async function fetchShiprocketTrackingInfo({
+  shipment_id,
+  awb_code,
+  sr_order_id,
+} = {}) {
+  if (!shipment_id && !awb_code && !sr_order_id) {
+    throw new Error(
+      "No identifiers provided to fetchShiprocketTrackingInfo (need awb_code, shipment_id, or sr_order_id)"
+    );
+  }
+
+  const token = await getShiprocketToken();
+
+  let url;
+  if (awb_code) {
+    // Prefer tracking by AWB
+    url = `${SHIPROCKET_BASE_URL}/external/courier/track/awb/${encodeURIComponent(
+      awb_code
+    )}`;
+  } else if (shipment_id) {
+    // Fallback: shipment id
+    url = `${SHIPROCKET_BASE_URL}/external/courier/track/shipment/${shipment_id}`;
+  } else {
+    // Last fallback: by Shiprocket order id (if supported on your plan)
+    url = `${SHIPROCKET_BASE_URL}/external/courier/track?order_id=${encodeURIComponent(
+      sr_order_id
+    )}`;
+  }
+
+  const res = await axios.get(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  const data = res.data;
+
+  const status =
+    data?.tracking_data?.shipment_status ||
+    data?.tracking_data?.track_status ||
+    data?.shipment_status ||
+    data?.current_status ||
+    data?.status ||
+    null;
+
+  const trackingUrl =
+    data?.tracking_url ||
+    data?.tracking_data?.track_url ||
+    data?.track_url ||
+    null;
+
+  const courierName =
+    data?.courier_name ||
+    data?.tracking_data?.courier_name ||
+    null;
+
+  const awbCode =
+    awb_code ||
+    data?.awb_code ||
+    data?.tracking_data?.awb_code ||
+    null;
+
+  return {
+    status,
+    awb_code: awbCode,
+    courier: courierName,
+    tracking_url: trackingUrl,
+    raw: data,
+  };
+}
+
 module.exports = {
   getShiprocketToken,
   buildShiprocketOrderPayload,
@@ -476,4 +555,5 @@ module.exports = {
   createShiprocketOrderFromOrder,
   createShiprocketReversePickupRaw,
   createShiprocketReversePickup,
+  fetchShiprocketTrackingInfo,
 };

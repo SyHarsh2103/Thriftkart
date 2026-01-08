@@ -4,9 +4,10 @@ const Razorpay = require("razorpay");
 const crypto = require("crypto");
 const rateLimit = require("express-rate-limit");
 
-// ✅ Shiprocket helper (from server/utils/shiprocket.js)
+// ✅ Shiprocket helpers
 const {
   createShiprocketOrderFromOrder,
+  fetchShiprocketTrackingInfo, // 👈 NEW: make sure it's exported from utils/shiprocket.js
 } = require("../utils/shiprocket");
 
 const router = express.Router();
@@ -38,7 +39,7 @@ function requireAdmin(req, res) {
 function getUserIdFromToken(auth) {
   if (!auth) return null;
 
-  if (auth.id) return auth.id;       // most likely in your app
+  if (auth.id) return auth.id; // most likely in your app
   if (auth.userId) return auth.userId;
   if (auth._id) return auth._id;
   if (auth.sub) return auth.sub;
@@ -251,29 +252,16 @@ async function syncWithShiprocket(savedOrder) {
       return;
     }
 
-    const sr = await createShiprocketOrderFromOrder(savedOrder);
+    // 🔹 createShiprocketOrderFromOrder already returns a normalized object:
+    //   {
+    //     enabled, sr_order_id, shipment_id, status,
+    //     awb_code, courier, label_url, manifest_url,
+    //     tracking_url, raw
+    //   }
+    const srInfo = await createShiprocketOrderFromOrder(savedOrder);
 
-    if (sr && typeof sr === "object") {
-      savedOrder.shiprocket = {
-        enabled: true,
-        sr_order_id: sr.order_id ?? sr.orderId ?? null,
-        shipment_id: Array.isArray(sr.shipment_id)
-          ? sr.shipment_id[0]
-          : sr.shipment_id ?? null,
-        status: sr.status || sr.current_status || "created",
-        awb_code: sr.awb_code || "",
-        courier:
-          (sr.courier_company && sr.courier_company.name) ||
-          sr.courier_name ||
-          "",
-        label_url: sr.label_url || "",
-        manifest_url: sr.manifest_url || "",
-        tracking_url:
-          sr.tracking_url ||
-          (sr.awb_code ? `https://shiprocket.co/tracking/${sr.awb_code}` : ""),
-        raw: sr,
-      };
-
+    if (srInfo && typeof srInfo === "object") {
+      savedOrder.shiprocket = srInfo;
       await savedOrder.save();
     }
 
@@ -530,6 +518,78 @@ router.put("/:id", async (req, res) => {
     return res
       .status(500)
       .json({ success: false, message: "Internal Server Error" });
+  }
+});
+
+// =====================================================
+// =========== SHIPROCKET TRACKING REFRESH (ADMIN) =====
+// =====================================================
+
+// Admin-only: manually refresh Shiprocket status for a single order
+router.post("/:id/shiprocket-refresh", async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+
+  try {
+    const order = await Orders.findById(req.params.id);
+    if (!order) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Order not found" });
+    }
+
+    if (!order.shiprocket || !order.shiprocket.enabled) {
+      return res.status(400).json({
+        success: false,
+        message: "This order is not linked to Shiprocket",
+      });
+    }
+
+    const shipInfo = order.shiprocket || {};
+    const { shipment_id, awb_code, sr_order_id } = shipInfo;
+
+    if (!shipment_id && !awb_code && !sr_order_id) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Shiprocket record does not have shipment_id / awb_code / sr_order_id for tracking",
+      });
+    }
+
+    // 🔹 Call helper in utils/shiprocket.js
+    const tracking = await fetchShiprocketTrackingInfo({
+      shipment_id,
+      awb_code,
+      sr_order_id,
+    });
+
+    // Merge latest tracking info into order.shiprocket
+    order.shiprocket = {
+      ...(order.shiprocket || {}),
+      status: tracking.status || order.shiprocket.status,
+      awb_code: tracking.awb_code || order.shiprocket.awb_code,
+      courier: tracking.courier || order.shiprocket.courier,
+      tracking_url: tracking.tracking_url || order.shiprocket.tracking_url,
+      raw: {
+        ...(order.shiprocket.raw || {}),
+        lastTracking: tracking.raw || tracking,
+      },
+    };
+
+    await order.save();
+
+    return res.json({
+      success: true,
+      shiprocket: order.shiprocket,
+    });
+  } catch (err) {
+    console.error(
+      "Shiprocket tracking refresh error:",
+      err?.response?.data || err.message || err
+    );
+    return res.status(500).json({
+      success: false,
+      message: "Failed to refresh Shiprocket status",
+    });
   }
 });
 

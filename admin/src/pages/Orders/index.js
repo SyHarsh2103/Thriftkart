@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useState } from "react";
-import { editData, fetchDataFromApi } from "../../utils/api";
+import { editData, fetchDataFromApi, postData } from "../../utils/api";
 
 import { emphasize, styled } from "@mui/material/styles";
 import Breadcrumbs from "@mui/material/Breadcrumbs";
@@ -68,7 +68,8 @@ const columns = [
   { id: "srShipmentId", label: "SR Shipment Id", minWidth: 130 },
   { id: "srAwbCode", label: "AWB Code", minWidth: 130 },
   { id: "srStatus", label: "SR Status", minWidth: 130 },
-  { id: "srTrack", label: "Track", minWidth: 120 }, // 👈 NEW COLUMN
+  { id: "srTrack", label: "Track", minWidth: 120 },
+  { id: "srRefresh", label: "SR Refresh", minWidth: 140 }, // 👈 NEW COLUMN
 
   { id: "orderStatus", label: "Order Status", minWidth: 140 },
   { id: "dateCreated", label: "Date Created", minWidth: 150 },
@@ -102,9 +103,7 @@ const Orders = () => {
       try {
         context.setProgress?.(30);
 
-        // 🔴 OLD:
-        // const res = await fetchDataFromApi(`/api/orders`);
-        // 🟢 NEW: explicit adminMode so backend returns ALL orders
+        // Explicit param (even though backend ignores it for admin)
         const res = await fetchDataFromApi(`/api/orders?adminMode=1`);
 
         if (!Array.isArray(res)) {
@@ -182,9 +181,6 @@ const Orders = () => {
           msg: updateRes?.msg || "Failed to update order status.",
         });
       } else {
-        // 🔴 OLD:
-        // const refreshed = await fetchDataFromApi(`/api/orders`);
-        // 🟢 NEW: keep adminMode=1 so admin still sees all orders
         const refreshed = await fetchDataFromApi(`/api/orders?adminMode=1`);
 
         if (Array.isArray(refreshed)) {
@@ -203,6 +199,61 @@ const Orders = () => {
         open: true,
         error: true,
         msg: err?.message || "Something went wrong while updating status.",
+      });
+    } finally {
+      context.setProgress?.(100);
+      setIsLoading(false);
+    }
+  };
+
+  // ---------- Refresh Shiprocket status for one order ----------
+  const handleRefreshShiprocket = async (orderId) => {
+    setIsLoading(true);
+    context.setProgress?.(40);
+
+    try {
+      const res = await postData(
+        `/api/orders/${orderId}/shiprocket-refresh`,
+        {}
+      );
+
+      if (!res || res.success === false) {
+        context.setAlertBox({
+          open: true,
+          error: true,
+          msg:
+            res?.message ||
+            "Failed to refresh Shiprocket status. Please try again.",
+        });
+      } else {
+        // Update only that order in local state
+        setOrders((prev) =>
+          Array.isArray(prev)
+            ? prev.map((o) =>
+                o._id === orderId
+                  ? {
+                      ...o,
+                      shiprocket: res.shiprocket || o.shiprocket || {},
+                    }
+                  : o
+              )
+            : prev
+        );
+
+        context.setAlertBox({
+          open: true,
+          error: false,
+          msg: "Shiprocket status refreshed.",
+        });
+      }
+    } catch (err) {
+      console.error("Error refreshing Shiprocket status:", err);
+      context.setAlertBox({
+        open: true,
+        error: true,
+        msg:
+          err?.message ||
+          "Something went wrong while refreshing Shiprocket status.",
       });
     } finally {
       context.setProgress?.(100);
@@ -387,6 +438,24 @@ const Orders = () => {
                               <span className="text-muted small">
                                 No tracking
                               </span>
+                            )}
+                          </TableCell>
+
+                          {/* 🔄 Refresh Shiprocket status */}
+                          <TableCell>
+                            {shiprocket?.enabled ? (
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                disabled={isLoading}
+                                onClick={() =>
+                                  handleRefreshShiprocket(order._id)
+                                }
+                              >
+                                Refresh
+                              </Button>
+                            ) : (
+                              <span className="text-muted small">—</span>
                             )}
                           </TableCell>
 
