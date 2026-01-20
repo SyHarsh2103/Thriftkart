@@ -1,5 +1,5 @@
 // src/Pages/Category/EditCategory.jsx
-import React, { useContext, useEffect, useState, useCallback } from "react";
+import React, { useContext, useEffect, useState } from "react";
 import Breadcrumbs from "@mui/material/Breadcrumbs";
 import HomeIcon from "@mui/icons-material/Home";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -18,79 +18,45 @@ import {
 } from "../../utils/api";
 import { MyContext } from "../../App";
 
-import { LazyLoadImage } from "react-lazy-load-image-component";
-import "react-lazy-load-image-component/src/effects/blur.css";
-
-// breadcrumb code
-const StyledBreadcrumb = styled(Chip)(({ theme }) => {
-  const backgroundColor =
+const StyledBreadcrumb = styled(Chip)(({ theme }) => ({
+  backgroundColor:
     theme.palette.mode === "light"
       ? theme.palette.grey[100]
-      : theme.palette.grey[800];
-  return {
-    backgroundColor,
-    height: theme.spacing(3),
-    color: theme.palette.text.primary,
-    fontWeight: theme.typography.fontWeightRegular,
-    "&:hover, &:focus": {
-      backgroundColor: emphasize(backgroundColor, 0.06),
-    },
-    "&:active": {
-      boxShadow: theme.shadows[1],
-      backgroundColor: emphasize(backgroundColor, 0.12),
-    },
-  };
-});
+      : theme.palette.grey[800],
+  height: theme.spacing(3),
+  color: theme.palette.text.primary,
+  fontWeight: theme.typography.fontWeightRegular,
+  "&:hover, &:focus": {
+    backgroundColor: emphasize(theme.palette.grey[100], 0.06),
+  },
+  "&:active": {
+    boxShadow: theme.shadows[1],
+    backgroundColor: emphasize(theme.palette.grey[100], 0.12),
+  },
+}));
 
 const EditCategory = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
 
-  // Text fields
+  // filenames only (for backend)
+  const [files, setFiles] = useState([]);
+
   const [formFields, setFormFields] = useState({
     name: "",
     color: "",
+    slug: "",
+    parentId: "",
   });
-
-  // Full image URLs for preview (what backend sends in GET /api/category/:id)
-  const [previews, setPreviews] = useState<string[]>([]);
-
-  // Pure filenames stored in Mongo (what backend expects for `images` + deleteImage)
-  const [imageFiles, setImageFiles] = useState<string[]>([]);
 
   const { id } = useParams();
   const history = useNavigate();
   const context = useContext(MyContext);
 
-  // Helper to derive the base URL for images (match backend BASE_URL)
-  const getImageBaseUrl = useCallback(() => {
-    if (previews.length > 0) {
-      const first = previews[0];
-      const marker = "/uploads/categories/";
-      const idx = first.indexOf(marker);
-      if (idx !== -1) {
-        return first.substring(0, idx);
-      }
-      // fallback to whole origin part
-      try {
-        const url = new URL(first);
-        return `${url.protocol}//${url.host}`;
-      } catch (e) {
-        // not a full URL, last fallback to window origin
-      }
-    }
-    if (typeof window !== "undefined") {
-      return window.location.origin;
-    }
-    return "";
-  }, [previews]);
-
-  // ---------------- Load category on mount ----------------
+  // ------------ Load category on mount ------------
   useEffect(() => {
     const loadCategory = async () => {
       try {
-        context.setProgress?.(20);
-
         const res = await fetchDataFromApi(`/api/category/${id}`);
         const cat = res?.categoryData?.[0];
 
@@ -103,24 +69,24 @@ const EditCategory = () => {
           return;
         }
 
-        // Backend already returns full URLs for images
-        const urls = Array.isArray(cat.images) ? cat.images : [];
+        // cat.images are FULL URLs -> convert to filenames
+        const filenames = Array.isArray(cat.images)
+          ? cat.images
+              .map((u) => {
+                if (!u) return null;
+                const parts = String(u).split("/");
+                return parts[parts.length - 1] || null;
+              })
+              .filter(Boolean)
+          : [];
 
-        // Extract filenames from URLs for backend operations
-        const filenames = urls
-          .map((u) => {
-            if (!u) return null;
-            const parts = String(u).split("/");
-            return parts[parts.length - 1] || null;
-          })
-          .filter(Boolean);
-
-        setPreviews(urls); // for <img src=...>
-        setImageFiles(filenames as string[]); // for PUT / DELETE
         setFormFields({
           name: cat.name || "",
           color: cat.color || "",
+          slug: cat.slug || "",
+          parentId: cat.parentId || "",
         });
+        setFiles(filenames);
       } catch (err) {
         console.error("Fetch category error:", err);
         context.setAlertBox({
@@ -128,47 +94,37 @@ const EditCategory = () => {
           error: true,
           msg: "Failed to load category",
         });
-      } finally {
-        context.setProgress?.(100);
       }
     };
 
     loadCategory();
-  }, [id, context]);
+  }, [id]); // no context dependency → no refresh loop
 
-  // ---------------- Handlers ----------------
-
-  const changeInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormFields((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+  const changeInput = (e) => {
+    setFormFields((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
-  // Upload new images
-  const onChangeFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // ------------ Upload new images (same UX as AddCategory) ------------
+  const onChangeFile = async (e) => {
     const selected = e.target.files;
     if (!selected || selected.length === 0) return;
 
     const formdata = new FormData();
-
-    for (const file of Array.from(selected)) {
+    for (let f of selected) {
       if (
-        !["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(
-          file.type
+        !["image/jpeg", "image/png", "image/webp", "image/jpg"].includes(
+          f.type
         )
       ) {
         context.setAlertBox({
           open: true,
           error: true,
-          msg: "Please select a valid JPG / PNG / WEBP image file.",
+          msg: "Only JPG/PNG/WEBP allowed.",
         });
         e.target.value = "";
         return;
       }
-
-      if (file.size > 1024 * 1024) {
+      if (f.size > 1024 * 1024) {
         context.setAlertBox({
           open: true,
           error: true,
@@ -177,28 +133,15 @@ const EditCategory = () => {
         e.target.value = "";
         return;
       }
-
-      formdata.append("images", file);
+      formdata.append("images", f);
     }
 
     try {
       setUploading(true);
-
-      // Backend returns an array of filenames
       const res = await uploadImage("/api/category/upload", formdata);
-
-      if (Array.isArray(res) && res.length > 0) {
-        // Add filenames to imageFiles (for DB)
-        setImageFiles((prev) => [...prev, ...res]);
-
-        // Build preview URLs for these new filenames (use same base as existing)
-        const base = getImageBaseUrl();
-        const newUrls = res.map(
-          (fn: string) => `${base}/uploads/categories/${fn}`
-        );
-
-        setPreviews((prev) => [...prev, ...newUrls]);
-
+      if (Array.isArray(res)) {
+        // res = filenames from backend
+        setFiles((prev) => [...prev, ...res]);
         context.setAlertBox({
           open: true,
           error: false,
@@ -212,8 +155,8 @@ const EditCategory = () => {
           msg: "Upload failed",
         });
       }
-    } catch (error) {
-      console.error("Upload error:", error);
+    } catch (err) {
+      console.error("Upload error:", err);
       context.setAlertBox({
         open: true,
         error: true,
@@ -225,83 +168,62 @@ const EditCategory = () => {
     }
   };
 
-  // Delete image (disk + DB reference) – backend checks isAdmin via JWT
-  const removeImg = async (index: number) => {
-    const filename = imageFiles[index]; // pure filename
-
-    if (!filename) {
-      // Safeguard: if somehow missing, just remove from preview/state
-      setPreviews((prev) => prev.filter((_, i) => i !== index));
-      setImageFiles((prev) => prev.filter((_, i) => i !== index));
-      return;
-    }
-
+  // ------------ Delete image (from disk + DB list) ------------
+  const removeFile = async (index, filename) => {
     try {
       await deleteImages(`/api/category/deleteImage?img=${filename}`);
-
-      // Remove from local state
-      setPreviews((prev) => prev.filter((_, i) => i !== index));
-      setImageFiles((prev) => prev.filter((_, i) => i !== index));
-
+      setFiles((prev) => prev.filter((_, i) => i !== index));
       context.setAlertBox({
         open: true,
         error: false,
         msg: "Image Deleted!",
       });
     } catch (err) {
-      console.error("Delete image error:", err);
+      console.error("Delete error:", err);
       context.setAlertBox({
         open: true,
         error: true,
-        msg: "Failed to delete image",
+        msg: "Delete failed",
       });
     }
   };
 
-  // Submit edited category
-  const editCat = async (e: React.FormEvent) => {
+  // ------------ Submit edit ------------
+  const editCat = async (e) => {
     e.preventDefault();
-
-    if (!formFields.name || !formFields.color || imageFiles.length === 0) {
-      context.setAlertBox({
-        open: true,
-        error: true,
-        msg: "Please fill all the details and keep at least one image.",
-      });
-      return;
-    }
 
     const payload = {
       name: formFields.name,
       color: formFields.color,
-      images: imageFiles, // IMPORTANT: send filenames only
+      images: files, // filenames only
+      // parentId stays as-is in DB because route doesn't handle it on PUT
     };
+
+    if (!payload.name || !payload.color || payload.images.length === 0) {
+      context.setAlertBox({
+        open: true,
+        error: true,
+        msg: "Please fill all details",
+      });
+      return;
+    }
 
     try {
       setIsLoading(true);
-
       const res = await editData(`/api/category/${id}`, payload);
+
       if (res?.success === false) {
         context.setAlertBox({
           open: true,
           error: true,
           msg: res.message || "Update failed",
         });
-        setIsLoading(false);
-        return;
+      } else {
+        context.fetchCategory?.();
+        history("/category");
       }
-
-      context.fetchCategory?.();
-
-      context.setAlertBox({
-        open: true,
-        error: false,
-        msg: "Category updated successfully!",
-      });
-
-      history("/category");
     } catch (err) {
-      console.error("Update category error:", err);
+      console.error("Update error:", err);
       context.setAlertBox({
         open: true,
         error: true,
@@ -314,10 +236,8 @@ const EditCategory = () => {
 
   return (
     <div className="right-content w-100">
-      {/* Header + Breadcrumbs */}
       <div className="card shadow border-0 w-100 flex-row p-4 mt-2">
         <h5 className="mb-0">Edit Category</h5>
-
         <Breadcrumbs aria-label="breadcrumb" className="ml-auto breadcrumbs_">
           <StyledBreadcrumb
             component="a"
@@ -338,18 +258,16 @@ const EditCategory = () => {
         </Breadcrumbs>
       </div>
 
-      {/* Form */}
       <form className="form" onSubmit={editCat}>
         <div className="row">
           <div className="col-sm-9">
             <div className="card p-4 mt-0">
-              {/* Basic fields */}
               <div className="form-group">
                 <h6>Category Name</h6>
                 <input
                   type="text"
                   name="name"
-                  value={formFields.name || ""}
+                  value={formFields.name}
                   onChange={changeInput}
                 />
               </div>
@@ -359,63 +277,65 @@ const EditCategory = () => {
                 <input
                   type="text"
                   name="color"
-                  value={formFields.color || ""}
+                  value={formFields.color}
                   onChange={changeInput}
                 />
               </div>
 
-              {/* Images section */}
               <div className="imagesUploadSec">
                 <h5 className="mb-4">Media And Published</h5>
 
-                <div className="imgUploadBox d-flex align-items-center">
-                  {/* Existing + newly added previews */}
-                  {previews?.length > 0 &&
-                    previews.map((img, index) => (
-                      <div className="uploadBox" key={index}>
-                        <span
-                          className="remove"
-                          onClick={() => removeImg(index)}
-                        >
-                          <IoCloseSharp />
-                        </span>
-                        <div className="box">
-                          <LazyLoadImage
-                            alt={"image"}
-                            effect="blur"
-                            className="w-100"
-                            src={img}
-                          />
-                        </div>
-                      </div>
-                    ))}
-
-                  {/* Upload Box */}
-                  <div className="uploadBox">
-                    {uploading ? (
-                      <div className="progressBar text-center d-flex align-items-center justify-content-center flex-column">
-                        <CircularProgress />
-                        <span>Uploading...</span>
-                      </div>
-                    ) : (
-                      <>
-                        <input
-                          type="file"
-                          multiple
-                          onChange={onChangeFile}
-                          name="images"
-                        />
-                        <div className="info">
-                          <FaRegImages />
-                          <h5>image upload</h5>
-                        </div>
-                      </>
-                    )}
+                {uploading ? (
+                  <div className="progressBar text-center d-flex align-items-center justify-content-center flex-column">
+                    <CircularProgress />
+                    <span>Uploading...</span>
                   </div>
-                </div>
+                ) : (
+                  <label htmlFor="file-upload">
+                    <input
+                      id="file-upload"
+                      type="file"
+                      multiple
+                      onChange={onChangeFile}
+                      style={{ display: "none" }}
+                    />
+                    <Button
+                      variant="contained"
+                      component="span"
+                      startIcon={<FaRegImages />}
+                      className="btn-blue"
+                    >
+                      Choose Files
+                    </Button>
+                  </label>
+                )}
+
+                {files.length > 0 && (
+                  <div className="uploaded-files mt-3">
+                    <h6>Uploaded Files:</h6>
+                    <ul className="list-unstyled">
+                      {files.map((fn, index) => (
+                        <li
+                          key={index}
+                          className="d-flex align-items-center justify-content-between border p-2 mb-2 rounded"
+                        >
+                          <span>{fn}</span>
+                          <Button
+                            size="small"
+                            color="error"
+                            variant="outlined"
+                            onClick={() => removeFile(index, fn)}
+                            startIcon={<IoCloseSharp />}
+                          >
+                            Remove
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
                 <br />
-
                 <Button
                   type="submit"
                   className="btn-blue btn-lg btn-big w-100"
@@ -431,8 +351,6 @@ const EditCategory = () => {
               </div>
             </div>
           </div>
-
-          {/* If you want a right sidebar (like Add Category) you can add col-sm-3 here later */}
         </div>
       </form>
     </div>
