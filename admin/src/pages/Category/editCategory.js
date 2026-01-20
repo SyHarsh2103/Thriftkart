@@ -1,5 +1,5 @@
 // src/Pages/Category/EditCategory.jsx
-import React, { useContext, useEffect, useState } from "react";
+import React, { useContext, useEffect, useState, useCallback } from "react";
 import Breadcrumbs from "@mui/material/Breadcrumbs";
 import HomeIcon from "@mui/icons-material/Home";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -21,7 +21,7 @@ import { MyContext } from "../../App";
 import { LazyLoadImage } from "react-lazy-load-image-component";
 import "react-lazy-load-image-component/src/effects/blur.css";
 
-//breadcrumb code
+// breadcrumb code
 const StyledBreadcrumb = styled(Chip)(({ theme }) => {
   const backgroundColor =
     theme.palette.mode === "light"
@@ -52,15 +52,38 @@ const EditCategory = () => {
     color: "",
   });
 
-  // 👉 Full image URLs for preview (what backend sends in GET /api/category/:id)
-  const [previews, setPreviews] = useState([]);
+  // Full image URLs for preview (what backend sends in GET /api/category/:id)
+  const [previews, setPreviews] = useState<string[]>([]);
 
-  // 👉 Pure filenames stored in Mongo (what backend expects for `images` + deleteImage)
-  const [imageFiles, setImageFiles] = useState([]);
+  // Pure filenames stored in Mongo (what backend expects for `images` + deleteImage)
+  const [imageFiles, setImageFiles] = useState<string[]>([]);
 
   const { id } = useParams();
   const history = useNavigate();
   const context = useContext(MyContext);
+
+  // Helper to derive the base URL for images (match backend BASE_URL)
+  const getImageBaseUrl = useCallback(() => {
+    if (previews.length > 0) {
+      const first = previews[0];
+      const marker = "/uploads/categories/";
+      const idx = first.indexOf(marker);
+      if (idx !== -1) {
+        return first.substring(0, idx);
+      }
+      // fallback to whole origin part
+      try {
+        const url = new URL(first);
+        return `${url.protocol}//${url.host}`;
+      } catch (e) {
+        // not a full URL, last fallback to window origin
+      }
+    }
+    if (typeof window !== "undefined") {
+      return window.location.origin;
+    }
+    return "";
+  }, [previews]);
 
   // ---------------- Load category on mount ----------------
   useEffect(() => {
@@ -93,7 +116,7 @@ const EditCategory = () => {
           .filter(Boolean);
 
         setPreviews(urls); // for <img src=...>
-        setImageFiles(filenames); // for PUT / DELETE
+        setImageFiles(filenames as string[]); // for PUT / DELETE
         setFormFields({
           name: cat.name || "",
           color: cat.color || "",
@@ -115,7 +138,7 @@ const EditCategory = () => {
 
   // ---------------- Handlers ----------------
 
-  const changeInput = (e) => {
+  const changeInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormFields((prev) => ({
       ...prev,
@@ -124,13 +147,13 @@ const EditCategory = () => {
   };
 
   // Upload new images
-  const onChangeFile = async (e) => {
+  const onChangeFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files;
     if (!selected || selected.length === 0) return;
 
     const formdata = new FormData();
 
-    for (const file of selected) {
+    for (const file of Array.from(selected)) {
       if (
         !["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(
           file.type
@@ -168,11 +191,10 @@ const EditCategory = () => {
         // Add filenames to imageFiles (for DB)
         setImageFiles((prev) => [...prev, ...res]);
 
-        // Build preview URLs for these new filenames
-        const origin =
-          typeof window !== "undefined" ? window.location.origin : "";
+        // Build preview URLs for these new filenames (use same base as existing)
+        const base = getImageBaseUrl();
         const newUrls = res.map(
-          (fn) => `${origin}/uploads/categories/${fn}`
+          (fn: string) => `${base}/uploads/categories/${fn}`
         );
 
         setPreviews((prev) => [...prev, ...newUrls]);
@@ -203,8 +225,8 @@ const EditCategory = () => {
     }
   };
 
-  // Delete image (disk + state) – backend already checks isAdmin via JWT
-  const removeImg = async (index) => {
+  // Delete image (disk + DB reference) – backend checks isAdmin via JWT
+  const removeImg = async (index: number) => {
     const filename = imageFiles[index]; // pure filename
 
     if (!filename) {
@@ -237,7 +259,7 @@ const EditCategory = () => {
   };
 
   // Submit edited category
-  const editCat = async (e) => {
+  const editCat = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!formFields.name || !formFields.color || imageFiles.length === 0) {
@@ -292,6 +314,7 @@ const EditCategory = () => {
 
   return (
     <div className="right-content w-100">
+      {/* Header + Breadcrumbs */}
       <div className="card shadow border-0 w-100 flex-row p-4 mt-2">
         <h5 className="mb-0">Edit Category</h5>
 
@@ -315,16 +338,18 @@ const EditCategory = () => {
         </Breadcrumbs>
       </div>
 
+      {/* Form */}
       <form className="form" onSubmit={editCat}>
         <div className="row">
           <div className="col-sm-9">
             <div className="card p-4 mt-0">
+              {/* Basic fields */}
               <div className="form-group">
                 <h6>Category Name</h6>
                 <input
                   type="text"
                   name="name"
-                  value={formFields.name}
+                  value={formFields.name || ""}
                   onChange={changeInput}
                 />
               </div>
@@ -334,11 +359,12 @@ const EditCategory = () => {
                 <input
                   type="text"
                   name="color"
-                  value={formFields.color}
+                  value={formFields.color || ""}
                   onChange={changeInput}
                 />
               </div>
 
+              {/* Images section */}
               <div className="imagesUploadSec">
                 <h5 className="mb-4">Media And Published</h5>
 
@@ -405,6 +431,8 @@ const EditCategory = () => {
               </div>
             </div>
           </div>
+
+          {/* If you want a right sidebar (like Add Category) you can add col-sm-3 here later */}
         </div>
       </form>
     </div>

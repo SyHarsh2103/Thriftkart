@@ -77,7 +77,7 @@ const normalizeImageNames = (images = []) => {
     .map((img) => {
       if (typeof img === "string") {
         const parts = img.split("/");
-        return parts[parts.length - 1];
+        return parts[parts.length - 1]; // filename.ext
       }
       return img;
     });
@@ -180,6 +180,7 @@ router.get("/", async (req, res) => {
     const data = createCategories(all);
     res.status(200).json({ categoryList: data });
   } catch (err) {
+    console.error("Get categories error:", err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -192,7 +193,8 @@ router.get("/get/count", async (req, res) => {
   try {
     const count = await Category.countDocuments({ parentId: undefined });
     res.json({ categoryCount: count });
-  } catch {
+  } catch (err) {
+    console.error("Category count error:", err);
     res.status(500).json({ success: false });
   }
 });
@@ -202,7 +204,8 @@ router.get("/subCat/get/count", async (req, res) => {
     const list = await Category.find();
     const sub = list.filter((c) => c.parentId !== undefined);
     res.json({ categoryCount: sub.length });
-  } catch {
+  } catch (err) {
+    console.error("Sub category count error:", err);
     res.status(500).json({ success: false });
   }
 });
@@ -245,6 +248,7 @@ router.get("/:id", async (req, res) => {
 
     res.status(200).json({ categoryData: payload });
   } catch (err) {
+    console.error("Get single category error:", err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -257,7 +261,7 @@ router.delete("/deleteImage", async (req, res) => {
   if (!requireAdmin(req, res)) return;
 
   try {
-    const img = req.query.img;
+    const img = req.query.img; // filename only, e.g. "12345_cat.png"
     if (!img) {
       return res
         .status(400)
@@ -265,16 +269,23 @@ router.delete("/deleteImage", async (req, res) => {
     }
 
     const filePath = path.join(UPLOAD_DIR, img);
+
+    // 1) Delete physical file (if present)
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
-      return res
-        .status(200)
-        .json({ success: true, message: "Image deleted" });
     }
+
+    // 2) Remove reference from any Category documents that contain this filename
+    await Category.updateMany(
+      { images: img },
+      { $pull: { images: img } }
+    );
+
     return res
-      .status(404)
-      .json({ success: false, message: "Image not found" });
+      .status(200)
+      .json({ success: true, message: "Image deleted" });
   } catch (err) {
+    console.error("Category deleteImage error:", err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -294,6 +305,7 @@ router.delete("/:id", async (req, res) => {
         .json({ success: false, message: "Category not found" });
     }
 
+    // delete local files
     for (const img of cat.images) {
       const fp = path.join(UPLOAD_DIR, img);
       if (fs.existsSync(fp)) fs.unlinkSync(fp);
@@ -302,6 +314,7 @@ router.delete("/:id", async (req, res) => {
     await Category.findByIdAndDelete(req.params.id);
     res.status(200).json({ success: true, message: "Category deleted!" });
   } catch (err) {
+    console.error("Delete category error:", err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -350,6 +363,7 @@ router.put("/:id", async (req, res) => {
 
     res.json({ success: true, category: payload });
   } catch (err) {
+    console.error("Update category error:", err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
