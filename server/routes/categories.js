@@ -68,6 +68,22 @@ const upload = multer({
 const toImageUrls = (filenames = []) =>
   filenames.map((name) => `${BASE_URL}/uploads/categories/${name}`);
 
+// Helper: normalize incoming image values (URLs or filenames) to filenames only
+const normalizeImageNames = (images = []) => {
+  if (!Array.isArray(images)) return [];
+
+  return images
+    .filter(Boolean)
+    .map((img) => {
+      // If full URL or path, just keep the last segment
+      if (typeof img === "string") {
+        const parts = img.split("/");
+        return parts[parts.length - 1]; // filename.ext
+      }
+      return img;
+    });
+};
+
 // Helper: build category tree
 const createCategories = (categories, parentId = null) => {
   const categoryList = [];
@@ -131,16 +147,26 @@ router.post("/create", async (req, res) => {
 
     const slug = slugify(name, { lower: true, strict: true });
 
+    // Normalize images: strip URL/path → store only filenames
+    const normalizedImages = normalizeImageNames(images);
+
     const category = new Category({
       name,
       slug,
       color: color || undefined,
       parentId: parentId || undefined,
-      images: Array.isArray(images) ? images : [], // store only filenames
+      images: normalizedImages, // store only filenames
     });
 
     const saved = await category.save();
-    res.status(201).json({ success: true, category: saved });
+
+    // Return with images as FULL URLs (same format as GET /)
+    const payload = {
+      ...saved.toObject(),
+      images: toImageUrls(saved.images),
+    };
+
+    res.status(201).json({ success: true, category: payload });
   } catch (err) {
     console.error("Create category error:", err);
     res.status(500).json({ success: false, error: err.message });
@@ -294,12 +320,18 @@ router.put("/:id", async (req, res) => {
 
   try {
     const { name, color, images } = req.body;
+
+    // If images are provided (URLs or filenames), normalize to filenames
+    const normalizedImages = Array.isArray(images)
+      ? normalizeImageNames(images)
+      : undefined;
+
     const updates = {
       ...(name
         ? { name, slug: slugify(name, { lower: true, strict: true }) }
         : {}),
       ...(typeof color !== "undefined" ? { color } : {}),
-      ...(Array.isArray(images) ? { images } : {}),
+      ...(normalizedImages ? { images: normalizedImages } : {}),
     };
 
     const category = await Category.findByIdAndUpdate(
@@ -314,7 +346,13 @@ router.put("/:id", async (req, res) => {
         .json({ success: false, message: "Category not found" });
     }
 
-    res.json(category);
+    // Return with images as FULL URLs so UI stays consistent
+    const payload = {
+      ...category.toObject(),
+      images: toImageUrls(category.images),
+    };
+
+    res.json({ success: true, category: payload });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
