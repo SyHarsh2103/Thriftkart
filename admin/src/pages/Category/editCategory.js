@@ -1,375 +1,356 @@
-import React from "react";
+// src/Pages/Category/EditCategory.jsx
+import React, { useContext, useEffect, useState } from "react";
 import Breadcrumbs from "@mui/material/Breadcrumbs";
 import HomeIcon from "@mui/icons-material/Home";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { emphasize, styled } from "@mui/material/styles";
 import Chip from "@mui/material/Chip";
-import { useContext, useEffect, useState } from "react";
-import { FaCloudUploadAlt } from "react-icons/fa";
+import { FaCloudUploadAlt, FaRegImages } from "react-icons/fa";
 import Button from "@mui/material/Button";
+import CircularProgress from "@mui/material/CircularProgress";
+import { IoCloseSharp } from "react-icons/io5";
+import { useNavigate, useParams } from "react-router-dom";
 import {
-  deleteData,
   deleteImages,
   editData,
   fetchDataFromApi,
-  postData,
   uploadImage,
 } from "../../utils/api";
-import { useNavigate } from "react-router-dom";
-import { FaRegImages } from "react-icons/fa";
 import { MyContext } from "../../App";
-import { useParams } from "react-router-dom";
 
-import CircularProgress from "@mui/material/CircularProgress";
-import { IoCloseSharp } from "react-icons/io5";
-
-import { LazyLoadImage } from "react-lazy-load-image-component";
-import "react-lazy-load-image-component/src/effects/blur.css";
-
-//breadcrumb code
-const StyledBreadcrumb = styled(Chip)(({ theme }) => {
-  const backgroundColor =
+const StyledBreadcrumb = styled(Chip)(({ theme }) => ({
+  backgroundColor:
     theme.palette.mode === "light"
       ? theme.palette.grey[100]
-      : theme.palette.grey[800];
-  return {
-    backgroundColor,
-    height: theme.spacing(3),
-    color: theme.palette.text.primary,
-    fontWeight: theme.typography.fontWeightRegular,
-    "&:hover, &:focus": {
-      backgroundColor: emphasize(backgroundColor, 0.06),
-    },
-    "&:active": {
-      boxShadow: theme.shadows[1],
-      backgroundColor: emphasize(backgroundColor, 0.12),
-    },
-  };
-});
+      : theme.palette.grey[800],
+  height: theme.spacing(3),
+  color: theme.palette.text.primary,
+  fontWeight: theme.typography.fontWeightRegular,
+  "&:hover, &:focus": {
+    backgroundColor: emphasize(theme.palette.grey[100], 0.06),
+  },
+  "&:active": {
+    boxShadow: theme.shadows[1],
+    backgroundColor: emphasize(theme.palette.grey[100], 0.12),
+  },
+}));
 
 const EditCategory = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+
+  // filenames only (what backend expects)
+  const [files, setFiles] = useState([]);
+
   const [formFields, setFormFields] = useState({
     name: "",
-    images: [],
     color: "",
+    slug: "",
+    parentId: "",
   });
 
-  const [previews, setPreviews] = useState([]);
-
-  const [category, setcategory] = useState([]);
-
-  let { id } = useParams();
-
-  const formdata = new FormData();
-
+  const { id } = useParams();
   const history = useNavigate();
-
   const context = useContext(MyContext);
 
+  // -------- Load existing category once --------
   useEffect(() => {
-    context.setProgress(20);
-    fetchDataFromApi("/api/imageUpload").then((res) => {
-      res?.map((item) => {
-        item?.images?.map((img) => {
-          deleteImages(`/api/category/deleteImage?img=${img}`).then((res) => {
-            deleteData("/api/imageUpload/deleteAllImages");
-          });
-        });
-      });
-    });
+    const loadCategory = async () => {
+      try {
+        const res = await fetchDataFromApi(`/api/category/${id}`);
+        const cat = res?.categoryData?.[0];
 
-    fetchDataFromApi(`/api/category/${id}`).then((res) => {
-      setcategory(res?.categoryData[0]);
-      setPreviews(res?.categoryData[0]?.images);
-      setFormFields({
-        name: res?.categoryData[0]?.name,
-        color: res?.categoryData[0]?.color,
-      });
-      context.setProgress(100);
-    });
-  }, []);
-
-  const changeInput = (e) => {
-    setFormFields(() => ({
-      ...formFields,
-      [e.target.name]: e.target.value,
-    }));
-  };
-
-  let img_arr = [];
-  let uniqueArray = [];
-
-  const onChangeFile = async (e, apiEndPoint) => {
-    try {
-      const files = e.target.files;
-
-      setUploading(true);
-
-      //const fd = new FormData();
-      for (var i = 0; i < files.length; i++) {
-        // Validate file type
-        if (
-          files[i] &&
-          (files[i].type === "image/jpeg" ||
-            files[i].type === "image/jpg" ||
-            files[i].type === "image/png")
-        ) {
-          const file = files[i];
-
-          formdata.append(`images`, file);
-        } else {
+        if (!cat) {
           context.setAlertBox({
             open: true,
             error: true,
-            msg: "Please select a valid JPG or PNG image file.",
+            msg: "Category not found",
           });
-          setUploading(false);
-          return false;
+          return;
         }
+
+        // cat.images are full URLs from backend
+        const filenames = Array.isArray(cat.images)
+          ? cat.images
+              .map((u) => {
+                if (!u) return null;
+                const parts = String(u).split("/");
+                return parts[parts.length - 1] || null;
+              })
+              .filter(Boolean)
+          : [];
+
+        setFormFields({
+          name: cat.name || "",
+          color: cat.color || "",
+          slug: cat.slug || "",
+          parentId: cat.parentId || "",
+        });
+        setFiles(filenames);
+      } catch (err) {
+        console.error("Fetch category error:", err);
+        context.setAlertBox({
+          open: true,
+          error: true,
+          msg: "Failed to load category",
+        });
       }
-    } catch (error) {
-      console.log(error);
-    }
+    };
 
-    uploadImage(apiEndPoint, formdata).then((res) => {
-      fetchDataFromApi("/api/imageUpload").then((response) => {
-        if (
-          response !== undefined &&
-          response !== null &&
-          response !== "" &&
-          response.length !== 0
-        ) {
-          response.length !== 0 &&
-            response.map((item) => {
-              item?.images.length !== 0 &&
-                item?.images?.map((img) => {
-                  img_arr.push(img);
+    loadCategory();
+  }, [id]); // no context in deps → no refresh loop
 
-                  //console.log(img)
-                });
-            });
-
-          uniqueArray = img_arr.filter(
-            (item, index) => img_arr.indexOf(item) === index
-          );
-          const appendedArray = [...previews, ...uniqueArray];
-
-          setPreviews(appendedArray);
-
-          setTimeout(() => {
-            setUploading(false);
-            img_arr = [];
-            uniqueArray=[];
-            fetchDataFromApi("/api/imageUpload").then((res) => {
-              res?.map((item) => {
-                item?.images?.map((img) => {
-                  deleteImages(`/api/category/deleteImage?img=${img}`).then((res) => {
-                  //  deleteData("/api/imageUpload/deleteAllImages");
-                  });
-                });
-              });
-            });
-            context.setAlertBox({
-              open: true,
-              error: false,
-              msg: "Images Uploaded!",
-            });
-          }, 500);
-        }
-      });
-    });
+  const changeInput = (e) => {
+    setFormFields((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
-  const removeImg = async (index, imgUrl) => {
-    const userInfo = JSON.parse(localStorage.getItem("user"));
-    if (userInfo?.email === "admin9643@gmail.com") {
-      const imgIndex = previews.indexOf(imgUrl);
+  // -------- Upload new images (same as AddCategory) --------
+  const onChangeFile = async (e) => {
+    const selected = e.target.files;
+    if (!selected || selected.length === 0) return;
 
-      deleteImages(`/api/category/deleteImage?img=${imgUrl}`).then((res) => {
+    const formdata = new FormData();
+    for (let f of selected) {
+      if (
+        !["image/jpeg", "image/png", "image/webp", "image/jpg"].includes(
+          f.type
+        )
+      ) {
+        context.setAlertBox({
+          open: true,
+          error: true,
+          msg: "Only JPG/PNG/WEBP allowed.",
+        });
+        e.target.value = "";
+        return;
+      }
+      if (f.size > 1024 * 1024) {
+        context.setAlertBox({
+          open: true,
+          error: true,
+          msg: "Each file must be ≤ 1 MB.",
+        });
+        e.target.value = "";
+        return;
+      }
+      formdata.append("images", f);
+    }
+
+    try {
+      setUploading(true);
+      const res = await uploadImage("/api/category/upload", formdata);
+      if (Array.isArray(res)) {
+        // res = filenames from backend
+        setFiles((prev) => [...prev, ...res]);
         context.setAlertBox({
           open: true,
           error: false,
-          msg: "Image Deleted!",
+          msg: "Images Uploaded!",
         });
-      });
-
-      if (imgIndex > -1) {
-        // only splice array when item is found
-        previews.splice(index, 1); // 2nd parameter means remove one item only
+      } else {
+        console.error("Unexpected upload response:", res);
+        context.setAlertBox({
+          open: true,
+          error: true,
+          msg: "Upload failed",
+        });
       }
-    } else {
+    } catch (err) {
+      console.error("Upload error:", err);
       context.setAlertBox({
         open: true,
         error: true,
-        msg: "Only Admin can delete Category Image",
+        msg: "Upload failed",
+      });
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  };
+
+  // -------- Delete an image (file + from local list) --------
+  const removeFile = async (index, filename) => {
+    try {
+      await deleteImages(`/api/category/deleteImage?img=${filename}`);
+      setFiles((prev) => prev.filter((_, i) => i !== index));
+      context.setAlertBox({
+        open: true,
+        error: false,
+        msg: "Image Deleted!",
+      });
+    } catch (err) {
+      console.error("Delete error:", err);
+      context.setAlertBox({
+        open: true,
+        error: true,
+        msg: "Delete failed",
       });
     }
   };
 
-  const editCat = (e) => {
+  // -------- Submit updated category (replace images) --------
+  const editCat = async (e) => {
     e.preventDefault();
+    const payload = {
+      name: formFields.name,
+      color: formFields.color,
+      images: files, // replace with this new list
+    };
 
-    const appendedArray = [...previews, ...uniqueArray];
-    console.log(appendedArray);
-
-    img_arr = [];
-    formdata.append("name", formFields.name);
-    formdata.append("color", formFields.color);
-
-    formdata.append("images", appendedArray);
-
-    formFields.images = appendedArray;
-
-    console.log(formFields);
-    if (
-      formFields.name !== "" &&
-      formFields.color !== "" &&
-      previews.length !== 0
-    ) {
-      setIsLoading(true);
-
-      editData(`/api/category/${id}`, formFields).then((res) => {
-        // console.log(res);
-        setIsLoading(false);
-        context.fetchCategory();
-
-        deleteData("/api/imageUpload/deleteAllImages");
-
-        history("/category");
-      });
-    } else {
+    if (!payload.name || !payload.color || payload.images.length === 0) {
       context.setAlertBox({
         open: true,
         error: true,
-        msg: "Please fill all the details",
+        msg: "Please fill all details",
       });
-      return false;
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const res = await editData(`/api/category/${id}`, payload);
+      if (res?.success === false) {
+        context.setAlertBox({
+          open: true,
+          error: true,
+          msg: res.message || "Update failed",
+        });
+      } else {
+        context.fetchCategory?.();
+        history("/category");
+      }
+    } catch (err) {
+      console.error("Update error:", err);
+      context.setAlertBox({
+        open: true,
+        error: true,
+        msg: "Update failed",
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
-    <>
-      <div className="right-content w-100">
-        <div className="card shadow border-0 w-100 flex-row p-4 mt-2">
-          <h5 className="mb-0">Edit Category</h5>
-          <Breadcrumbs aria-label="breadcrumb" className="ml-auto breadcrumbs_">
-            <StyledBreadcrumb
-              component="a"
-              href="#"
-              label="Dashboard"
-              icon={<HomeIcon fontSize="small" />}
-            />
+    <div className="right-content w-100">
+      <div className="card shadow border-0 w-100 flex-row p-4 mt-2">
+        <h5 className="mb-0">Edit Category</h5>
+        <Breadcrumbs aria-label="breadcrumb" className="ml-auto breadcrumbs_">
+          <StyledBreadcrumb
+            component="a"
+            href="#"
+            label="Dashboard"
+            icon={<HomeIcon fontSize="small" />}
+          />
+          <StyledBreadcrumb
+            component="a"
+            label="Category"
+            href="#"
+            deleteIcon={<ExpandMoreIcon />}
+          />
+          <StyledBreadcrumb
+            label="Edit Category"
+            deleteIcon={<ExpandMoreIcon />}
+          />
+        </Breadcrumbs>
+      </div>
 
-            <StyledBreadcrumb
-              component="a"
-              label="Category"
-              href="#"
-              deleteIcon={<ExpandMoreIcon />}
-            />
-            <StyledBreadcrumb
-              label="Edit Category"
-              deleteIcon={<ExpandMoreIcon />}
-            />
-          </Breadcrumbs>
-        </div>
+      <form className="form" onSubmit={editCat}>
+        <div className="row">
+          <div className="col-sm-9">
+            <div className="card p-4 mt-0">
+              <div className="form-group">
+                <h6>Category Name</h6>
+                <input
+                  type="text"
+                  name="name"
+                  value={formFields.name}
+                  onChange={changeInput}
+                />
+              </div>
 
-        <form className="form" onSubmit={editCat}>
-          <div className="row">
-            <div className="col-sm-9">
-              <div className="card p-4 mt-0">
-                <div className="form-group">
-                  <h6>Category Name</h6>
-                  <input
-                    type="text"
-                    name="name"
-                    value={formFields.name}
-                    onChange={changeInput}
-                  />
-                </div>
+              <div className="form-group">
+                <h6>Color</h6>
+                <input
+                  type="text"
+                  name="color"
+                  value={formFields.color}
+                  onChange={changeInput}
+                />
+              </div>
 
-                <div className="form-group">
-                  <h6>Color</h6>
-                  <input
-                    type="text"
-                    name="color"
-                    value={formFields.color}
-                    onChange={changeInput}
-                  />
-                </div>
+              <div className="imagesUploadSec">
+                <h5 className="mb-4">Media And Published</h5>
 
-                <div className="imagesUploadSec">
-                  <h5 class="mb-4">Media And Published</h5>
-
-                  <div className="imgUploadBox d-flex align-items-center">
-                    {previews?.length !== 0 &&
-                      previews?.map((img, index) => {
-                        return (
-                          <div className="uploadBox" key={index}>
-                            <span
-                              className="remove"
-                              onClick={() => removeImg(index, img)}
-                            >
-                              <IoCloseSharp />
-                            </span>
-                            <div className="box">
-                              <LazyLoadImage
-                                alt={"image"}
-                                effect="blur"
-                                className="w-100"
-                                src={img}
-                              />
-                            </div>
-                          </div>
-                        );
-                      })}
-
-                    <div className="uploadBox">
-                      {uploading === true ? (
-                        <div className="progressBar text-center d-flex align-items-center justify-content-center flex-column">
-                          <CircularProgress />
-                          <span>Uploading...</span>
-                        </div>
-                      ) : (
-                        <>
-                          <input
-                            type="file"
-                            
-                            onChange={(e) =>
-                              onChangeFile(e, "/api/category/upload")
-                            }
-                            name="images"
-                          />
-                          <div className="info">
-                            <FaRegImages />
-                            <h5>image upload</h5>
-                          </div>
-                        </>
-                      )}
-                    </div>
+                {uploading ? (
+                  <div className="progressBar text-center d-flex align-items-center justify-content-center flex-column">
+                    <CircularProgress />
+                    <span>Uploading...</span>
                   </div>
+                ) : (
+                  <label htmlFor="file-upload">
+                    <input
+                      id="file-upload"
+                      type="file"
+                      multiple
+                      onChange={onChangeFile}
+                      style={{ display: "none" }}
+                    />
+                    <Button
+                      variant="contained"
+                      component="span"
+                      startIcon={<FaRegImages />}
+                      className="btn-blue"
+                    >
+                      Choose Files
+                    </Button>
+                  </label>
+                )}
 
-                  <br />
+                {files.length > 0 && (
+                  <div className="uploaded-files mt-3">
+                    <h6>Uploaded Files:</h6>
+                    <ul className="list-unstyled">
+                      {files.map((fn, index) => (
+                        <li
+                          key={index}
+                          className="d-flex align-items-center justify-content-between border p-2 mb-2 rounded"
+                        >
+                          <span>{fn}</span>
+                          <Button
+                            size="small"
+                            color="error"
+                            variant="outlined"
+                            onClick={() => removeFile(index, fn)}
+                            startIcon={<IoCloseSharp />}
+                          >
+                            Remove
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
-                  <Button
-                    type="submit"
-                    className="btn-blue btn-lg btn-big w-100"
-                  >
-                    <FaCloudUploadAlt /> &nbsp;{" "}
-                    {isLoading === true ? (
-                      <CircularProgress color="inherit" className="loader" />
-                    ) : (
-                      "PUBLISH AND VIEW"
-                    )}{" "}
-                  </Button>
-                </div>
+                <br />
+                <Button
+                  type="submit"
+                  className="btn-blue btn-lg btn-big w-100"
+                  disabled={isLoading}
+                >
+                  <FaCloudUploadAlt /> &nbsp;
+                  {isLoading ? (
+                    <CircularProgress color="inherit" className="loader" />
+                  ) : (
+                    "PUBLISH AND VIEW"
+                  )}
+                </Button>
               </div>
             </div>
           </div>
-        </form>
-      </div>
-    </>
+        </div>
+      </form>
+    </div>
   );
 };
 
