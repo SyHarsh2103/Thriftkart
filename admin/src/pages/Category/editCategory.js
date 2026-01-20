@@ -40,7 +40,7 @@ const EditCategory = () => {
   const [uploading, setUploading] = useState(false);
 
   // filenames only (what backend expects)
-  const [files, setFiles] = useState([]);
+  const [files, setFiles] = useState<string[]>([]);
 
   const [formFields, setFormFields] = useState({
     name: "",
@@ -48,6 +48,9 @@ const EditCategory = () => {
     slug: "",
     parentId: "",
   });
+
+  // prevent multiple uploads in SAME edit session
+  const [hasUploadedOnce, setHasUploadedOnce] = useState(false);
 
   const { id } = useParams();
   const history = useNavigate();
@@ -69,10 +72,10 @@ const EditCategory = () => {
           return;
         }
 
-        // cat.images are full URLs from backend
+        // cat.images are full URLs from backend → convert to filenames
         const filenames = Array.isArray(cat.images)
           ? cat.images
-              .map((u) => {
+              .map((u: string) => {
                 if (!u) return null;
                 const parts = String(u).split("/");
                 return parts[parts.length - 1] || null;
@@ -86,7 +89,8 @@ const EditCategory = () => {
           slug: cat.slug || "",
           parentId: cat.parentId || "",
         });
-        setFiles(filenames);
+        setFiles(filenames as string[]);
+        setHasUploadedOnce(false); // fresh edit session
       } catch (err) {
         console.error("Fetch category error:", err);
         context.setAlertBox({
@@ -98,19 +102,48 @@ const EditCategory = () => {
     };
 
     loadCategory();
-  }, [id]); // no context in deps → no refresh loop
+  }, [id]); // keep deps minimal → no infinite refresh
 
-  const changeInput = (e) => {
-    setFormFields((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+  const changeInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormFields((prev) => ({ ...prev, [name]: value }));
   };
 
-  // -------- Upload new images (same as AddCategory) --------
-  const onChangeFile = async (e) => {
+  // -------- Upload new images (AUTO-REMOVE OLD, ONLY ONCE PER SESSION) --------
+  const onChangeFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files;
     if (!selected || selected.length === 0) return;
 
+    // Guard: only ONE upload batch allowed per edit session
+    if (hasUploadedOnce) {
+      context.setAlertBox({
+        open: true,
+        error: true,
+        msg: "You have already uploaded images. Please save the category or reload the page before uploading again.",
+      });
+      e.target.value = "";
+      return;
+    }
+
+    // 1) Delete all existing images on server (old category images)
+    if (files.length > 0) {
+      try {
+        await Promise.all(
+          files.map((fn) =>
+            deleteImages(`/api/category/deleteImage?img=${fn}`)
+          )
+        );
+      } catch (err) {
+        console.error("Error deleting old images:", err);
+        // you can early-return here if you want strict behaviour
+      }
+      setFiles([]); // clear local list of old filenames
+    }
+
+    // 2) Validate + upload new files
     const formdata = new FormData();
-    for (let f of selected) {
+    for (let i = 0; i < selected.length; i++) {
+      const f = selected[i];
       if (
         !["image/jpeg", "image/png", "image/webp", "image/jpg"].includes(
           f.type
@@ -140,8 +173,9 @@ const EditCategory = () => {
       setUploading(true);
       const res = await uploadImage("/api/category/upload", formdata);
       if (Array.isArray(res)) {
-        // res = filenames from backend
-        setFiles((prev) => [...prev, ...res]);
+        // Replace with new filenames
+        setFiles(res);
+        setHasUploadedOnce(true); // block further uploads this session
         context.setAlertBox({
           open: true,
           error: false,
@@ -168,8 +202,8 @@ const EditCategory = () => {
     }
   };
 
-  // -------- Delete an image (file + from local list) --------
-  const removeFile = async (index, filename) => {
+  // -------- Delete a single currently selected image --------
+  const removeFile = async (index: number, filename: string) => {
     try {
       await deleteImages(`/api/category/deleteImage?img=${filename}`);
       setFiles((prev) => prev.filter((_, i) => i !== index));
@@ -189,12 +223,13 @@ const EditCategory = () => {
   };
 
   // -------- Submit updated category (replace images) --------
-  const editCat = async (e) => {
+  const editCat = async (e: React.FormEvent) => {
     e.preventDefault();
+
     const payload = {
       name: formFields.name,
       color: formFields.color,
-      images: files, // replace with this new list
+      images: files, // final filenames
     };
 
     if (!payload.name || !payload.color || payload.images.length === 0) {
