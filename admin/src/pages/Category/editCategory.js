@@ -1,3 +1,4 @@
+// src/Pages/Category/EditCategory.jsx
 import React, { useContext, useEffect, useState } from "react";
 import Breadcrumbs from "@mui/material/Breadcrumbs";
 import HomeIcon from "@mui/icons-material/Home";
@@ -91,8 +92,8 @@ const EditCategory = () => {
           })
           .filter(Boolean);
 
-        setPreviews(urls);            // for <img src=...>
-        setImageFiles(filenames);     // for PUT / DELETE
+        setPreviews(urls); // for <img src=...>
+        setImageFiles(filenames); // for PUT / DELETE
         setFormFields({
           name: cat.name || "",
           color: cat.color || "",
@@ -110,8 +111,7 @@ const EditCategory = () => {
     };
 
     loadCategory();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [id, context]);
 
   // ---------------- Handlers ----------------
 
@@ -165,7 +165,7 @@ const EditCategory = () => {
       const res = await uploadImage("/api/category/upload", formdata);
 
       if (Array.isArray(res) && res.length > 0) {
-        // Add filenames to imageFiles
+        // Add filenames to imageFiles (for DB)
         setImageFiles((prev) => [...prev, ...res]);
 
         // Build preview URLs for these new filenames
@@ -203,22 +203,12 @@ const EditCategory = () => {
     }
   };
 
-  // Delete image (disk + state)
+  // Delete image (disk + state) – backend already checks isAdmin via JWT
   const removeImg = async (index) => {
-    const userInfo = JSON.parse(localStorage.getItem("user"));
-
-    if (userInfo?.email !== "admin9643@gmail.com") {
-      context.setAlertBox({
-        open: true,
-        error: true,
-        msg: "Only Admin can delete Category Image",
-      });
-      return;
-    }
-
     const filename = imageFiles[index]; // pure filename
+
     if (!filename) {
-      // Safeguard: if somehow missing, just remove from preview
+      // Safeguard: if somehow missing, just remove from preview/state
       setPreviews((prev) => prev.filter((_, i) => i !== index));
       setImageFiles((prev) => prev.filter((_, i) => i !== index));
       return;

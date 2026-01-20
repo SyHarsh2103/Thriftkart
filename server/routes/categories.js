@@ -1,3 +1,4 @@
+// server/routes/category.js
 const express = require("express");
 const router = express.Router();
 const path = require("path");
@@ -71,14 +72,12 @@ const toImageUrls = (filenames = []) =>
 // Helper: normalize incoming image values (URLs or filenames) to filenames only
 const normalizeImageNames = (images = []) => {
   if (!Array.isArray(images)) return [];
-
   return images
     .filter(Boolean)
     .map((img) => {
-      // If full URL or path, just keep the last segment
       if (typeof img === "string") {
         const parts = img.split("/");
-        return parts[parts.length - 1]; // filename.ext
+        return parts[parts.length - 1];
       }
       return img;
     });
@@ -100,7 +99,7 @@ const createCategories = (categories, parentId = null) => {
       name: cat.name,
       slug: cat.slug,
       color: cat.color,
-      images: toImageUrls(cat.images), // return full URLs to frontend
+      images: toImageUrls(cat.images),
       children: createCategories(categories, cat._id),
     });
   }
@@ -147,7 +146,6 @@ router.post("/create", async (req, res) => {
 
     const slug = slugify(name, { lower: true, strict: true });
 
-    // Normalize images: strip URL/path → store only filenames
     const normalizedImages = normalizeImageNames(images);
 
     const category = new Category({
@@ -155,12 +153,11 @@ router.post("/create", async (req, res) => {
       slug,
       color: color || undefined,
       parentId: parentId || undefined,
-      images: normalizedImages, // store only filenames
+      images: normalizedImages,
     });
 
     const saved = await category.save();
 
-    // Return with images as FULL URLs (same format as GET /)
     const payload = {
       ...saved.toObject(),
       images: toImageUrls(saved.images),
@@ -224,7 +221,6 @@ router.get("/:id", async (req, res) => {
         .json({ success: false, message: "Category not found" });
     }
 
-    // for GET one, return node + its direct children
     const children = all.filter(
       (c) => String(c.parentId) === String(category._id)
     );
@@ -261,7 +257,7 @@ router.delete("/deleteImage", async (req, res) => {
   if (!requireAdmin(req, res)) return;
 
   try {
-    const img = req.query.img; // filename only
+    const img = req.query.img;
     if (!img) {
       return res
         .status(400)
@@ -298,7 +294,6 @@ router.delete("/:id", async (req, res) => {
         .json({ success: false, message: "Category not found" });
     }
 
-    // delete local files
     for (const img of cat.images) {
       const fp = path.join(UPLOAD_DIR, img);
       if (fs.existsSync(fp)) fs.unlinkSync(fp);
@@ -321,18 +316,20 @@ router.put("/:id", async (req, res) => {
   try {
     const { name, color, images } = req.body;
 
-    // If images are provided (URLs or filenames), normalize to filenames
-    const normalizedImages = Array.isArray(images)
-      ? normalizeImageNames(images)
-      : undefined;
+    const updates = {};
 
-    const updates = {
-      ...(name
-        ? { name, slug: slugify(name, { lower: true, strict: true }) }
-        : {}),
-      ...(typeof color !== "undefined" ? { color } : {}),
-      ...(normalizedImages ? { images: normalizedImages } : {}),
-    };
+    if (name) {
+      updates.name = name;
+      updates.slug = slugify(name, { lower: true, strict: true });
+    }
+    if (typeof color !== "undefined") {
+      updates.color = color;
+    }
+
+    // If images provided (even []), normalize and update
+    if (Array.isArray(images)) {
+      updates.images = normalizeImageNames(images);
+    }
 
     const category = await Category.findByIdAndUpdate(
       req.params.id,
@@ -346,7 +343,6 @@ router.put("/:id", async (req, res) => {
         .json({ success: false, message: "Category not found" });
     }
 
-    // Return with images as FULL URLs so UI stays consistent
     const payload = {
       ...category.toObject(),
       images: toImageUrls(category.images),
