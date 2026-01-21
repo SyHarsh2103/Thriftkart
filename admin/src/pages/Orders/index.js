@@ -10,15 +10,7 @@ import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
 import Dialog from "@mui/material/Dialog";
 import Button from "@mui/material/Button";
-
-import Paper from "@mui/material/Paper";
-import Table from "@mui/material/Table";
-import TableBody from "@mui/material/TableBody";
-import TableCell from "@mui/material/TableCell";
-import TableContainer from "@mui/material/TableContainer";
-import TableHead from "@mui/material/TableHead";
 import TablePagination from "@mui/material/TablePagination";
-import TableRow from "@mui/material/TableRow";
 
 import { MdClose } from "react-icons/md";
 import { MdOutlineEmail } from "react-icons/md";
@@ -49,32 +41,6 @@ const StyledBreadcrumb = styled(Chip)(({ theme }) => {
   };
 });
 
-// ---------- Table columns ----------
-const columns = [
-  { id: "orderId", label: "Order Id", minWidth: 130 }, // TKORxxxx
-  { id: "mongoId", label: "Mongo Id", minWidth: 150 }, // _id (for debugging)
-  { id: "paymentId", label: "Payment Id", minWidth: 140 },
-  { id: "products", label: "Products", minWidth: 150 },
-  { id: "name", label: "Name", minWidth: 130 },
-  { id: "phoneNumber", label: "Phone Number", minWidth: 150 },
-  { id: "address", label: "Address", minWidth: 200 },
-  { id: "pincode", label: "Pincode", minWidth: 120 },
-  { id: "totalAmount", label: "Total Amount", minWidth: 120 },
-  { id: "email", label: "Email", minWidth: 180 },
-  { id: "userId", label: "User Id", minWidth: 150 },
-
-  // 🔹 Shiprocket info
-  { id: "srOrderId", label: "SR Order Id", minWidth: 130 },
-  { id: "srShipmentId", label: "SR Shipment Id", minWidth: 130 },
-  { id: "srAwbCode", label: "AWB Code", minWidth: 130 },
-  { id: "srStatus", label: "SR Status", minWidth: 130 },
-  { id: "srTrack", label: "Track", minWidth: 120 },
-  { id: "srRefresh", label: "SR Refresh", minWidth: 140 }, // 👈 NEW COLUMN
-
-  { id: "orderStatus", label: "Order Status", minWidth: 140 },
-  { id: "dateCreated", label: "Date Created", minWidth: 150 },
-];
-
 const Orders = () => {
   const [orders, setOrders] = useState([]);
   const [products, setProducts] = useState([]);
@@ -102,8 +68,6 @@ const Orders = () => {
     const loadOrders = async () => {
       try {
         context.setProgress?.(30);
-
-        // Explicit param (even though backend ignores it for admin)
         const res = await fetchDataFromApi(`/api/orders?adminMode=1`);
 
         if (!Array.isArray(res)) {
@@ -226,7 +190,6 @@ const Orders = () => {
             "Failed to refresh Shiprocket status. Please try again.",
         });
       } else {
-        // Update only that order in local state
         setOrders((prev) =>
           Array.isArray(prev)
             ? prev.map((o) =>
@@ -294,223 +257,208 @@ const Orders = () => {
           </div>
         </div>
 
-        {/* Table */}
+        {/* Cards list */}
         <div className="card shadow border-0 p-3 mt-4">
-          <Paper sx={{ width: "100%", overflow: "hidden" }}>
-            <TableContainer sx={{ maxHeight: 440 }}>
-              <Table stickyHeader aria-label="orders table">
-                <TableHead>
-                  <TableRow>
-                    {columns.map((column) => (
-                      <TableCell
-                        key={column.id}
-                        style={{ minWidth: column.minWidth }}
+          {paginatedOrders?.length > 0 ? (
+            paginatedOrders.map((order) => {
+              const shiprocket = order.shiprocket || {};
+
+              return (
+                <div
+                  className="card shadow-sm border mb-3 p-3"
+                  key={order._id}
+                >
+                  {/* Top row: Id, date, amount, status, products btn */}
+                  <div className="d-flex flex-wrap justify-content-between align-items-center mb-2">
+                    <div className="mb-2">
+                      <div className="text-muted small">Order Id</div>
+                      <div className="font-weight-bold text-primary">
+                        {order?.orderId || "—"}
+                      </div>
+                    </div>
+
+                    <div className="mb-2">
+                      <div className="text-muted small">Date</div>
+                      <div>
+                        <MdOutlineDateRange />{" "}
+                        {order?.date
+                          ? String(order.date).split("T")[0]
+                          : "—"}
+                      </div>
+                    </div>
+
+                    <div className="mb-2">
+                      <div className="text-muted small">Total Amount</div>
+                      <div>
+                        <MdOutlineCurrencyRupee /> {order?.amount}
+                      </div>
+                    </div>
+
+                    <div className="mb-2" style={{ minWidth: 180 }}>
+                      <div className="text-muted small">Order Status</div>
+                      <Select
+                        disabled={isLoading}
+                        value={
+                          typeof order?.status === "string"
+                            ? order.status
+                            : ""
+                        }
+                        onChange={(e) => handleChangeStatus(e, order?._id)}
+                        displayEmpty
+                        inputProps={{ "aria-label": "Order status" }}
+                        size="small"
+                        className="w-100"
                       >
-                        {column.label}
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                </TableHead>
+                        <MenuItem value="">
+                          <em>None</em>
+                        </MenuItem>
+                        <MenuItem value="pending">Pending</MenuItem>
+                        <MenuItem value="confirm">Confirm</MenuItem>
+                        <MenuItem value="processing">Processing</MenuItem>
+                        <MenuItem value="shipped">Shipped</MenuItem>
+                        <MenuItem value="delivered">Delivered</MenuItem>
+                        <MenuItem value="cancelled">Cancelled</MenuItem>
+                      </Select>
+                    </div>
 
-                <TableBody>
-                  {paginatedOrders?.length > 0 ? (
-                    paginatedOrders.map((order) => {
-                      const shiprocket = order.shiprocket || {};
+                    <div className="mb-2">
+                      <div className="text-muted small">Products</div>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={() => showProducts(order?._id)}
+                      >
+                        View Products
+                      </Button>
+                    </div>
+                  </div>
 
-                      return (
-                        <TableRow hover key={order._id}>
-                          {/* Thriftkart orderId (e.g., TKOR1234) */}
-                          <TableCell>
-                            <span className="text-blue font-weight-bold">
-                              {order?.orderId || "—"}
-                            </span>
-                          </TableCell>
+                  <hr className="my-2" />
 
-                          {/* Mongo _id */}
-                          <TableCell>
-                            <span className="text-muted small">
-                              {order?._id}
-                            </span>
-                          </TableCell>
+                  {/* Customer + meta */}
+                  <div className="row small">
+                    <div className="col-md-6 mb-2">
+                      <div>
+                        <strong>Customer:</strong> {order?.name || "—"}
+                      </div>
+                      <div>
+                        <FaPhoneAlt /> {order?.phoneNumber || "—"}
+                      </div>
+                      <div>
+                        <MdOutlineEmail /> {order?.email || "—"}
+                      </div>
+                      <div>
+                        <strong>Address:</strong>{" "}
+                        {order?.address || "—"}
+                      </div>
+                      <div>
+                        <strong>Pincode:</strong> {order?.pincode || "—"}
+                      </div>
+                    </div>
 
-                          {/* Payment Id */}
-                          <TableCell>
-                            <span className="text-blue font-weight-bold">
-                              {order?.paymentId || "—"}
-                            </span>
-                          </TableCell>
+                    <div className="col-md-6 mb-2">
+                      <div>
+                        <strong>Payment Id:</strong>{" "}
+                        {order?.paymentId || "—"}
+                      </div>
+                      <div>
+                        <strong>User Id:</strong> {order?.userid || "—"}
+                      </div>
+                      <div>
+                        <strong>Mongo Id:</strong>{" "}
+                        <span className="text-muted small">
+                          {order?._id}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
 
-                          {/* Products */}
-                          <TableCell>
-                            <span
-                              className="text-blue font-weight-bold cursor"
-                              onClick={() => showProducts(order?._id)}
-                            >
-                              Click here to view
-                            </span>
-                          </TableCell>
+                  <hr className="my-2" />
 
-                          {/* Customer name */}
-                          <TableCell>{order?.name}</TableCell>
+                  {/* Shiprocket block */}
+                  <div className="row small">
+                    <div className="col-md-3 mb-2">
+                      <div className="text-muted">SR Order Id</div>
+                      <div className="font-weight-bold">
+                        {typeof shiprocket?.sr_order_id !== "undefined" &&
+                        shiprocket?.sr_order_id !== null
+                          ? shiprocket.sr_order_id
+                          : "Not synced"}
+                      </div>
+                    </div>
 
-                          {/* Phone */}
-                          <TableCell>
-                            <FaPhoneAlt /> {order?.phoneNumber || "—"}
-                          </TableCell>
+                    <div className="col-md-3 mb-2">
+                      <div className="text-muted">SR Shipment Id</div>
+                      <div>
+                        {typeof shiprocket?.shipment_id !== "undefined" &&
+                        shiprocket?.shipment_id !== null
+                          ? shiprocket.shipment_id
+                          : "—"}
+                      </div>
+                    </div>
 
-                          {/* Address */}
-                          <TableCell>{order?.address}</TableCell>
+                    <div className="col-md-3 mb-2">
+                      <div className="text-muted">AWB Code</div>
+                      <div>{shiprocket?.awb_code || "—"}</div>
+                    </div>
 
-                          {/* Pincode */}
-                          <TableCell>{order?.pincode}</TableCell>
+                    <div className="col-md-3 mb-2">
+                      <div className="text-muted">SR Status</div>
+                      <div>
+                        {shiprocket?.status
+                          ? shiprocket.status
+                          : shiprocket?.enabled
+                          ? "Created (no status)"
+                          : "—"}
+                      </div>
+                    </div>
+                  </div>
 
-                          {/* Amount */}
-                          <TableCell>
-                            <MdOutlineCurrencyRupee /> {order?.amount}
-                          </TableCell>
+                  <div className="d-flex flex-wrap justify-content-between align-items-center mt-2 small">
+                    <div className="mb-2">
+                      <span className="text-muted">Tracking: </span>
+                      {shiprocket?.tracking_url ? (
+                        <a
+                          href={shiprocket.tracking_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="btn btn-sm btn-outline-primary ml-2"
+                        >
+                          Track
+                        </a>
+                      ) : (
+                        <span className="text-muted">No tracking</span>
+                      )}
+                    </div>
 
-                          {/* Email */}
-                          <TableCell>
-                            <MdOutlineEmail /> {order?.email}
-                          </TableCell>
+                    <div className="mb-2">
+                      {shiprocket?.enabled ? (
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          disabled={isLoading}
+                          onClick={() => handleRefreshShiprocket(order._id)}
+                        >
+                          Refresh Shiprocket
+                        </Button>
+                      ) : (
+                        <span className="text-muted">
+                          Shiprocket not enabled
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <div className="text-center text-muted py-4">
+              No orders found.
+            </div>
+          )}
 
-                          {/* UserId */}
-                          <TableCell>{order?.userid}</TableCell>
-
-                          {/* Shiprocket Order Id */}
-                          <TableCell>
-                            {typeof shiprocket?.sr_order_id !== "undefined" &&
-                            shiprocket?.sr_order_id !== null ? (
-                              <span className="text-blue font-weight-bold">
-                                {shiprocket.sr_order_id}
-                              </span>
-                            ) : (
-                              <span className="text-muted small">
-                                Not synced
-                              </span>
-                            )}
-                          </TableCell>
-
-                          {/* Shiprocket Shipment Id */}
-                          <TableCell>
-                            {typeof shiprocket?.shipment_id !== "undefined" &&
-                            shiprocket?.shipment_id !== null ? (
-                              <span>{shiprocket.shipment_id}</span>
-                            ) : (
-                              <span className="text-muted small">—</span>
-                            )}
-                          </TableCell>
-
-                          {/* AWB Code */}
-                          <TableCell>
-                            {shiprocket?.awb_code ? (
-                              <span>{shiprocket.awb_code}</span>
-                            ) : (
-                              <span className="text-muted small">—</span>
-                            )}
-                          </TableCell>
-
-                          {/* Shiprocket Status */}
-                          <TableCell>
-                            {shiprocket?.status ? (
-                              <span>{shiprocket.status}</span>
-                            ) : shiprocket?.enabled ? (
-                              <span className="text-muted small">
-                                Created (no status)
-                              </span>
-                            ) : (
-                              <span className="text-muted small">—</span>
-                            )}
-                          </TableCell>
-
-                          {/* 🔗 Track Shipment */}
-                          <TableCell>
-                            {shiprocket?.tracking_url ? (
-                              <a
-                                href={shiprocket.tracking_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="btn btn-sm btn-outline-primary"
-                              >
-                                Track
-                              </a>
-                            ) : (
-                              <span className="text-muted small">
-                                No tracking
-                              </span>
-                            )}
-                          </TableCell>
-
-                          {/* 🔄 Refresh Shiprocket status */}
-                          <TableCell>
-                            {shiprocket?.enabled ? (
-                              <Button
-                                variant="outlined"
-                                size="small"
-                                disabled={isLoading}
-                                onClick={() =>
-                                  handleRefreshShiprocket(order._id)
-                                }
-                              >
-                                Refresh
-                              </Button>
-                            ) : (
-                              <span className="text-muted small">—</span>
-                            )}
-                          </TableCell>
-
-                          {/* Order Status (local) */}
-                          <TableCell>
-                            <Select
-                              disabled={isLoading}
-                              value={
-                                typeof order?.status === "string"
-                                  ? order.status
-                                  : ""
-                              }
-                              onChange={(e) =>
-                                handleChangeStatus(e, order?._id)
-                              }
-                              displayEmpty
-                              inputProps={{ "aria-label": "Order status" }}
-                              size="small"
-                              className="w-100"
-                            >
-                              <MenuItem value="">
-                                <em>None</em>
-                              </MenuItem>
-                              <MenuItem value="pending">Pending</MenuItem>
-                              <MenuItem value="confirm">Confirm</MenuItem>
-                              <MenuItem value="processing">
-                                Processing
-                              </MenuItem>
-                              <MenuItem value="shipped">Shipped</MenuItem>
-                              <MenuItem value="delivered">Delivered</MenuItem>
-                              <MenuItem value="cancelled">Cancelled</MenuItem>
-                            </Select>
-                          </TableCell>
-
-                          {/* Date */}
-                          <TableCell>
-                            <MdOutlineDateRange />{" "}
-                            {order?.date
-                              ? String(order.date).split("T")[0]
-                              : "—"}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={columns.length} align="center">
-                        No orders found.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </TableContainer>
-
+          {/* Pagination at bottom */}
+          <div className="d-flex justify-content-end mt-2">
             <TablePagination
               rowsPerPageOptions={[10, 25, 100]}
               component="div"
@@ -520,7 +468,7 @@ const Orders = () => {
               onPageChange={handleChangePage}
               onRowsPerPageChange={handleChangeRowsPerPage}
             />
-          </Paper>
+          </div>
         </div>
       </div>
 

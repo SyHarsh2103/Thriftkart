@@ -1,4 +1,3 @@
-// admin/src/pages/ReturnRequests/index.js
 import React, { useContext, useEffect, useState } from "react";
 import { MyContext } from "../../App";
 import { fetchDataFromApi, editData } from "../../utils/api";
@@ -9,14 +8,6 @@ import Chip from "@mui/material/Chip";
 import HomeIcon from "@mui/icons-material/Home";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 
-import Paper from "@mui/material/Paper";
-import Table from "@mui/material/Table";
-import TableBody from "@mui/material/TableBody";
-import TableCell from "@mui/material/TableCell";
-import TableContainer from "@mui/material/TableContainer";
-import TableHead from "@mui/material/TableHead";
-import TablePagination from "@mui/material/TablePagination";
-import TableRow from "@mui/material/TableRow";
 import Select from "@mui/material/Select";
 import MenuItem from "@mui/material/MenuItem";
 import Dialog from "@mui/material/Dialog";
@@ -24,9 +15,12 @@ import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
 import Typography from "@mui/material/Typography";
 import Divider from "@mui/material/Divider";
+import TablePagination from "@mui/material/TablePagination";
 
-// ✅ Use react-icons for MdClose (your comment suggested this)
 import { MdClose } from "react-icons/md";
+import { MdOutlineEmail, MdOutlineDateRange } from "react-icons/md";
+import { FaPhoneAlt } from "react-icons/fa";
+import { MdOutlineCurrencyRupee } from "react-icons/md";
 
 const StyledBreadcrumb = styled(Chip)(({ theme }) => {
   const backgroundColor =
@@ -48,26 +42,12 @@ const StyledBreadcrumb = styled(Chip)(({ theme }) => {
   };
 });
 
-const columns = [
-  { id: "id", label: "Return ID", minWidth: 180 },
-  { id: "orderNumber", label: "Order", minWidth: 160 },
-  { id: "user", label: "User", minWidth: 200 },
-  { id: "reason", label: "Reason", minWidth: 160 },
-  { id: "resolution", label: "Resolution", minWidth: 140 },
-  { id: "status", label: "Status", minWidth: 180 },
-  // 🔹 New columns for reverse pickup
-  { id: "reverseAwb", label: "Reverse AWB", minWidth: 150 },
-  { id: "reverseTracking", label: "Pickup Tracking", minWidth: 160 },
-  { id: "requestedAt", label: "Requested At", minWidth: 140 },
-  { id: "items", label: "Items", minWidth: 120 },
-];
-
 // Small helper for dates
 const formatDateOnly = (value) => {
   if (!value) return "-";
   try {
-    if (value.includes("T")) return value.split("T")[0];
-    return value;
+    if (String(value).includes("T")) return String(value).split("T")[0];
+    return String(value);
   } catch {
     return value;
   }
@@ -89,7 +69,7 @@ const AdminReturnRequests = () => {
     setIsLoading(true);
     fetchDataFromApi("/api/returns")
       .then((res) => {
-        // Expecting { success, data } from backend
+        // Expecting either array or { data: [] }
         if (Array.isArray(res)) {
           setRows(res);
         } else if (res?.data && Array.isArray(res.data)) {
@@ -112,7 +92,7 @@ const AdminReturnRequests = () => {
   useEffect(() => {
     window.scrollTo(0, 0);
     loadData();
-    // eslint-disable-next-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleChangePage = (_event, newPage) => {
@@ -120,19 +100,26 @@ const AdminReturnRequests = () => {
   };
 
   const handleChangeRowsPerPage = (event) => {
-    setRowsPerPage(+event.target.value);
+    setRowsPerPage(+event.target.value || 10);
     setPage1(0);
   };
 
   const handleChangeStatus = (e, id) => {
     const value = e.target.value;
+    if (!value) return;
+
     setIsLoading(true);
-    context.setProgress(40);
+    context.setProgress?.(40);
 
     editData(`/api/returns/${id}/status`, { status: value })
       .then(() => {
-        context.setProgress(80);
+        context.setProgress?.(80);
         loadData();
+        context.setAlertBox({
+          open: true,
+          error: false,
+          msg: "Return status updated successfully.",
+        });
       })
       .catch((err) => {
         console.error("update status error:", err);
@@ -143,15 +130,15 @@ const AdminReturnRequests = () => {
         });
       })
       .finally(() => {
-        context.setProgress(100);
+        context.setProgress?.(100);
         setIsLoading(false);
       });
   };
 
   const openItemsDialog = (rr) => {
-    // Prefer rr.items, fallback to full order products if needed
+    // Prefer rr.items, fallback to order.products
     const items =
-      (rr.items && rr.items.length && rr.items) ||
+      (Array.isArray(rr.items) && rr.items.length && rr.items) ||
       rr.orderId?.products ||
       [];
 
@@ -166,9 +153,16 @@ const AdminReturnRequests = () => {
     setDialogRequest(null);
   };
 
+  const sortedRows = Array.isArray(rows) ? [...rows] : [];
+  const paginated = sortedRows.slice(
+    page1 * rowsPerPage,
+    page1 * rowsPerPage + rowsPerPage
+  );
+
   return (
     <>
       <div className="right-content w-100">
+        {/* Header */}
         <div className="card shadow border-0 w-100 flex-row p-4 align-items-center">
           <h5 className="mb-0">Return Requests</h5>
 
@@ -191,6 +185,7 @@ const AdminReturnRequests = () => {
           </div>
         </div>
 
+        {/* Cards list */}
         <div className="card shadow border-0 p-3 mt-4">
           {isLoading && (
             <div className="text-center mb-3">
@@ -198,155 +193,209 @@ const AdminReturnRequests = () => {
             </div>
           )}
 
-          <Paper sx={{ width: "100%", overflow: "hidden" }}>
-            <TableContainer sx={{ maxHeight: 520 }}>
-              <Table stickyHeader aria-label="returns table">
-                <TableHead>
-                  <TableRow>
-                    {columns.map((column) => (
-                      <TableCell
-                        key={column.id}
-                        style={{ minWidth: column.minWidth }}
+          {paginated?.length > 0 ? (
+            paginated.map((rr) => {
+              const order = rr.orderId || {};
+              const user = rr.userId || {};
+              const reverse = rr.reversePickup || {};
+
+              const orderNumber =
+                order.orderId || order._id || rr.orderNumber || rr._id;
+
+              const requestedDate =
+                formatDateOnly(rr.requestedAt) ||
+                formatDateOnly(rr.createdAt);
+
+              return (
+                <div
+                  className="card shadow-sm border mb-3 p-3"
+                  key={rr._id}
+                >
+                  {/* Top row: Return Id, Order, date, status, items btn */}
+                  <div className="d-flex flex-wrap justify-content-between align-items-center mb-2">
+                    <div className="mb-2">
+                      <div className="text-muted small">Return ID</div>
+                      <div className="font-weight-bold text-primary">
+                        {rr._id}
+                      </div>
+                    </div>
+
+                    <div className="mb-2">
+                      <div className="text-muted small">Order</div>
+                      <div className="font-weight-bold">
+                        {orderNumber || "—"}
+                      </div>
+                    </div>
+
+                    <div className="mb-2">
+                      <div className="text-muted small">Requested On</div>
+                      <div>
+                        <MdOutlineDateRange /> {requestedDate || "—"}
+                      </div>
+                    </div>
+
+                    <div className="mb-2" style={{ minWidth: 200 }}>
+                      <div className="text-muted small">Return Status</div>
+                      <Select
+                        value={rr.status || "pending"}
+                        size="small"
+                        onChange={(e) => handleChangeStatus(e, rr._id)}
+                        disabled={isLoading}
+                        className="w-100"
                       >
-                        {column.label}
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                </TableHead>
+                        <MenuItem value="pending">Pending</MenuItem>
+                        <MenuItem value="approved">Approved</MenuItem>
+                        <MenuItem value="rejected">Rejected</MenuItem>
+                        <MenuItem value="pickup_scheduled">
+                          Pickup Scheduled
+                        </MenuItem>
+                        <MenuItem value="picked">Picked</MenuItem>
+                        <MenuItem value="refund_initiated">
+                          Refund Initiated
+                        </MenuItem>
+                        <MenuItem value="refund_completed">
+                          Refund Completed
+                        </MenuItem>
+                        <MenuItem value="closed">Closed</MenuItem>
+                      </Select>
+                    </div>
 
-                <TableBody>
-                  {rows
-                    .slice(
-                      page1 * rowsPerPage,
-                      page1 * rowsPerPage + rowsPerPage
-                    )
-                    .map((rr) => {
-                      const order = rr.orderId || {};
-                      const user = rr.userId || {};
-                      const reverse = rr.reversePickup || {};
+                    <div className="mb-2">
+                      <div className="text-muted small">Items</div>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={() => openItemsDialog(rr)}
+                      >
+                        View Items
+                      </Button>
+                    </div>
+                  </div>
 
-                      const orderNumber =
-                        order.orderId ||
-                        order._id ||
-                        rr.orderNumber ||
-                        rr._id;
+                  <hr className="my-2" />
 
-                      const requestedDate =
-                        formatDateOnly(rr.requestedAt) ||
-                        formatDateOnly(rr.createdAt);
+                  {/* Order + user block */}
+                  <div className="row small">
+                    <div className="col-md-6 mb-2">
+                      <div className="text-muted mb-1">
+                        <strong>Order Info</strong>
+                      </div>
+                      <div className="mb-1">
+                        <b>Order #:</b> {orderNumber || "—"}
+                      </div>
+                      <div className="mb-1">
+                        <b>Amount:</b>{" "}
+                        <MdOutlineCurrencyRupee /> {order.amount ?? "—"}
+                      </div>
+                      <div className="mb-1">
+                        <b>Order Status:</b> {order.status || "—"}
+                      </div>
+                    </div>
 
-                      return (
-                        <TableRow hover key={rr._id}>
-                          {/* Return ID */}
-                          <TableCell>{rr._id}</TableCell>
+                    <div className="col-md-6 mb-2">
+                      <div className="text-muted mb-1">
+                        <strong>Customer</strong>
+                      </div>
+                      <div className="mb-1">
+                        <b>Name:</b>{" "}
+                        {order.name || user.name || "—"}
+                      </div>
+                      <div className="mb-1">
+                        <MdOutlineEmail />{" "}
+                        {user.email || order.email || "—"}
+                      </div>
+                      <div className="mb-1">
+                        <FaPhoneAlt />{" "}
+                        {order.phoneNumber || user.phoneNumber || "—"}
+                      </div>
+                      <div className="mb-1">
+                        <b>Address:</b>{" "}
+                        {order.address && order.pincode
+                          ? `${order.address}, ${order.pincode}`
+                          : "—"}
+                      </div>
+                    </div>
+                  </div>
 
-                          {/* Order */}
-                          <TableCell>
-                            <strong>{orderNumber}</strong>
-                            <br />
-                            <small>
-                              Amount: ₹{order.amount ?? "-"} | Status:{" "}
-                              {order.status ?? "-"}
-                            </small>
-                          </TableCell>
+                  <hr className="my-2" />
 
-                          {/* User */}
-                          <TableCell>
-                            {user.name || "-"}
-                            <br />
-                            <small>{user.email || "-"}</small>
-                            {user.phoneNumber && (
-                              <>
-                                <br />
-                                <small>📞 {user.phoneNumber}</small>
-                              </>
-                            )}
-                          </TableCell>
+                  {/* Reason / resolution */}
+                  <div className="row small">
+                    <div className="col-md-6 mb-2">
+                      <div className="text-muted mb-1">
+                        <strong>Reason</strong>
+                      </div>
+                      <div>{rr.reason || "—"}</div>
+                    </div>
+                    <div className="col-md-6 mb-2">
+                      <div className="text-muted mb-1">
+                        <strong>Resolution</strong>
+                      </div>
+                      <div>{rr.resolution || "—"}</div>
+                    </div>
+                  </div>
 
-                          {/* Reason */}
-                          <TableCell>{rr.reason || "-"}</TableCell>
+                  <hr className="my-2" />
 
-                          {/* Resolution */}
-                          <TableCell>{rr.resolution || "-"}</TableCell>
+                  {/* Reverse pickup block */}
+                  <div className="row small">
+                    <div className="col-md-3 mb-2">
+                      <div className="text-muted">Reverse AWB</div>
+                      <div>
+                        {reverse.enabled && reverse.awb_code
+                          ? reverse.awb_code
+                          : "—"}
+                      </div>
+                    </div>
 
-                          {/* Status */}
-                          <TableCell>
-                            <Select
-                              value={rr.status || "pending"}
-                              size="small"
-                              onChange={(e) => handleChangeStatus(e, rr._id)}
-                              disabled={isLoading}
-                              className="w-100"
-                            >
-                              <MenuItem value="pending">Pending</MenuItem>
-                              <MenuItem value="approved">Approved</MenuItem>
-                              <MenuItem value="rejected">Rejected</MenuItem>
-                              <MenuItem value="pickup_scheduled">
-                                Pickup Scheduled
-                              </MenuItem>
-                              <MenuItem value="picked">Picked</MenuItem>
-                              <MenuItem value="refund_initiated">
-                                Refund Initiated
-                              </MenuItem>
-                              <MenuItem value="refund_completed">
-                                Refund Completed
-                              </MenuItem>
-                              <MenuItem value="closed">Closed</MenuItem>
-                            </Select>
-                          </TableCell>
+                    <div className="col-md-3 mb-2">
+                      <div className="text-muted">Reverse Status</div>
+                      <div>
+                        {reverse.enabled
+                          ? reverse.status || "Created"
+                          : "—"}
+                      </div>
+                    </div>
 
-                          {/* 🔹 Reverse AWB */}
-                          <TableCell>
-                            {reverse.enabled && reverse.awb_code
-                              ? reverse.awb_code
-                              : "—"}
-                          </TableCell>
+                    <div className="col-md-6 mb-2 d-flex align-items-center justify-content-between">
+                      <div>
+                        <span className="text-muted">Pickup Tracking: </span>
+                        {reverse.enabled && reverse.tracking_url ? (
+                          <a
+                            href={reverse.tracking_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="btn btn-sm btn-outline-primary ml-2"
+                          >
+                            Track Pickup
+                          </a>
+                        ) : (
+                          <span className="text-muted">No tracking</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <div className="text-center text-muted py-4">
+              No return requests found.
+            </div>
+          )}
 
-                          {/* 🔹 Pickup Tracking link */}
-                          <TableCell>
-                            {reverse.enabled && reverse.tracking_url ? (
-                              <a
-                                href={reverse.tracking_url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-blue"
-                              >
-                                Track Pickup
-                              </a>
-                            ) : (
-                              <span className="text-muted small">—</span>
-                            )}
-                          </TableCell>
-
-                          {/* Requested At */}
-                          <TableCell>{requestedDate || "-"}</TableCell>
-
-                          {/* Items */}
-                          <TableCell>
-                            <span
-                              className="text-blue cursor"
-                              onClick={() => openItemsDialog(rr)}
-                            >
-                              View items
-                            </span>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                </TableBody>
-              </Table>
-            </TableContainer>
-
+          {/* Pagination */}
+          <div className="d-flex justify-content-end mt-2">
             <TablePagination
               rowsPerPageOptions={[10, 25, 100]}
               component="div"
-              count={rows.length}
+              count={Array.isArray(rows) ? rows.length : 0}
               rowsPerPage={rowsPerPage}
               page={page1}
               onPageChange={handleChangePage}
               onRowsPerPageChange={handleChangeRowsPerPage}
             />
-          </Paper>
+          </div>
         </div>
       </div>
 
@@ -356,6 +405,7 @@ const AdminReturnRequests = () => {
         className="productModal"
         maxWidth="md"
         fullWidth
+        onClose={closeDialog}
       >
         <Button className="close_" onClick={closeDialog}>
           <MdClose />
@@ -385,7 +435,9 @@ const AdminReturnRequests = () => {
                       "-"}
                   </p>
                   <p className="mb-1">
-                    <b>Amount:</b> ₹{dialogRequest.orderId?.amount ?? "-"}
+                    <b>Amount:</b>{" "}
+                    <MdOutlineCurrencyRupee />{" "}
+                    {dialogRequest.orderId?.amount ?? "-"}
                   </p>
                   <p className="mb-1">
                     <b>Payment:</b>{" "}
@@ -404,7 +456,8 @@ const AdminReturnRequests = () => {
                           dialogRequest.orderId?.createdAt || ""
                         ) || "-"}
                   </p>
-                  {/* 🔹 Shiprocket info (forward shipment) */}
+
+                  {/* Forward shipment (Shiprocket) */}
                   {dialogRequest.orderId?.shiprocket &&
                     dialogRequest.orderId.shiprocket.enabled && (
                       <div className="mt-2">
@@ -490,7 +543,7 @@ const AdminReturnRequests = () => {
                 <b>Status:</b> {dialogRequest.status || "pending"}
               </p>
 
-              {/* 🔹 Reverse Pickup (Shiprocket) */}
+              {/* Reverse Pickup (Shiprocket) */}
               {dialogRequest.reversePickup &&
                 dialogRequest.reversePickup.enabled && (
                   <>
@@ -504,7 +557,8 @@ const AdminReturnRequests = () => {
                     </p>
                     {dialogRequest.reversePickup.awb_code && (
                       <p className="mb-1">
-                        <b>AWB:</b> {dialogRequest.reversePickup.awb_code}
+                        <b>AWB:</b>{" "}
+                        {dialogRequest.reversePickup.awb_code}
                       </p>
                     )}
                     {dialogRequest.reversePickup.tracking_url && (
@@ -529,6 +583,7 @@ const AdminReturnRequests = () => {
 
         <Divider className="mb-3" />
 
+        {/* Items table (same as before) */}
         <div className="table-responsive orderTable px-3 pb-3">
           <table className="table table-striped table-bordered">
             <thead className="thead-dark">
@@ -544,7 +599,9 @@ const AdminReturnRequests = () => {
             <tbody>
               {dialogItems?.map((item, index) => {
                 const productId =
-                  (item.productId && item.productId._id) || item.productId || "-";
+                  (item.productId && item.productId._id) ||
+                  item.productId ||
+                  "-";
                 const productTitle =
                   item.productTitle ||
                   (item.productId && item.productId.title) ||
