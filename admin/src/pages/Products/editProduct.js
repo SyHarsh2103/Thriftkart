@@ -1,3 +1,4 @@
+// src/Pages/Products/EditUpload.jsx
 import Breadcrumbs from "@mui/material/Breadcrumbs";
 import HomeIcon from "@mui/icons-material/Home";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -15,22 +16,17 @@ import {
   deleteImages,
   editData,
   fetchDataFromApi,
-  postData,
   uploadImage,
 } from "../../utils/api";
 import { MyContext } from "../../App";
 import CircularProgress from "@mui/material/CircularProgress";
 import { FaRegImages } from "react-icons/fa";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { IoCloseSharp } from "react-icons/io5";
-
-import { Link, useParams } from "react-router-dom";
 
 import { LazyLoadImage } from "react-lazy-load-image-component";
 import "react-lazy-load-image-component/src/effects/blur.css";
 
-import axios from "axios";
-import CountryDropdown from "../../components/CountryDropdown";
 import Select2 from "react-select";
 
 //breadcrumb code
@@ -80,20 +76,22 @@ const EditUpload = () => {
   const [ratingsValue, setRatingValue] = useState(1);
   const [isFeaturedValue, setisFeaturedValue] = useState("");
 
-  const [catData, setCatData] = useState([]);
   const [subCatData, setSubCatData] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
 
-  const [product, setProducts] = useState([]);
+  const [previews, setPreviews] = useState([]);      // full URLs for preview
+  const [imageFiles, setImageFiles] = useState([]);  // filenames only for backend
 
-  const [previews, setPreviews] = useState([]);
   const [selectedLocation, setSelectedLocation] = useState([]);
   const [countryList, setCountryList] = useState([]);
 
-  let { id } = useParams();
-
+  const { id } = useParams();
   const history = useNavigate();
+  const context = useContext(MyContext);
+
+  // We derive base URL for product images from existing ones
+  const imageBaseRef = useRef("");
 
   const [formFields, setFormFields] = useState({
     name: "",
@@ -117,44 +115,36 @@ const EditUpload = () => {
     location: [],
   });
 
-  const productImages = useRef();
+  const contextCountries = context?.countryList || [];
 
-  const context = useContext(MyContext);
-
-  const formdata = new FormData();
-
+  // Country list (prepend "All")
   useEffect(() => {
     const newData = {
       value: "All",
       label: "All",
     };
-    const updatedArray = [...context?.countryList]; // Clone the array to avoid direct mutation
-    updatedArray.unshift(newData); // Prepend data
+    const updatedArray = [...contextCountries];
+    updatedArray.unshift(newData);
     setCountryList(updatedArray);
-  }, [context?.countryList]);
+  }, [contextCountries]);
 
-  // useEffect(() => {
-  //   formFields.location = context.selectedCountry;
-  // }, [context.selectedCountry]);
-
+  // SubCategory list
   useEffect(() => {
     fetchDataFromApi("/api/subCat").then((res) => {
-      setSubCatData(res.subCategoryList); // store all subcategories
+      setSubCatData(res?.subCategoryList || []);
     });
   }, []);
-  
 
+  // Load product + setup initial form + images
   useEffect(() => {
     window.scrollTo(0, 0);
-
     context.setselectedCountry("");
 
-    setCatData(context.catData);
-
+    // Clean temporary imageUpload (optional – keeping your existing cleanup)
     fetchDataFromApi("/api/imageUpload").then((res) => {
-      res?.map((item) => {
-        item?.images?.map((img) => {
-          deleteImages(`/api/products/deleteImage?img=${img}`).then((res) => {
+      res?.forEach((item) => {
+        item?.images?.forEach((img) => {
+          deleteImages(`/api/products/deleteImage?img=${img}`).then(() => {
             deleteData("/api/imageUpload/deleteAllImages");
           });
         });
@@ -162,8 +152,15 @@ const EditUpload = () => {
     });
 
     fetchDataFromApi(`/api/products/${id}`).then((res) => {
-      console.log(res);
-      setProducts(res);
+      if (!res) {
+        context.setAlertBox({
+          open: true,
+          error: true,
+          msg: "Product not found",
+        });
+        return;
+      }
+
       setFormFields({
         name: res.name,
         description: res.description,
@@ -171,418 +168,400 @@ const EditUpload = () => {
         price: res.price,
         oldPrice: res.oldPrice,
         catName: res.catName,
-        category: res.category,
+        category: res.category?._id || res.catId || "",
         catId: res.catId,
         subCat: res.subCat,
         countInStock: res.countInStock,
         rating: res.rating,
         isFeatured: res.isFeatured,
         discount: res.discount,
-        productRam: res.productRam,
-        size: res.size,
-        productWeight: res.productWeight,
-        location: res.location,
+        productRam: res.productRam || [],
+        size: res.size || [],
+        productWeight: res.productWeight || [],
+        location: res.location || [],
+        subCatId: res.subCatId,
+        subCatName: res.subCatName,
       });
 
-      setSelectedLocation(res.location);
-
-      setRatingValue(res.rating);
-      console.log(res);
-      setcategoryVal(res.category?._id);
-      setSubCatVal(res.subCatId);
+      setSelectedLocation(res.location || []);
+      setRatingValue(res.rating || 0);
+      setcategoryVal(res.category?._id || res.catId || "");
+      setSubCatVal(res.subCatId || "");
       setisFeaturedValue(res.isFeatured);
-      setProductRAMS(res.productRam);
-      setProductSize(res.size);
-      setProductWeight(res.productWeight);
-      setPreviews(res.images);
+      setProductRAMS(res.productRam || []);
+      setProductSize(res.size || []);
+      setProductWeight(res.productWeight || []);
+
+      // images from backend are full URLs
+      const urls = Array.isArray(res.images) ? res.images : [];
+      setPreviews(urls);
+
+      // derive filenames from URLs for backend
+      const filenames = urls
+        .map((u) => {
+          if (!u) return null;
+          const parts = String(u).split("/");
+          return parts[parts.length - 1] || null;
+        })
+        .filter(Boolean);
+      setImageFiles(filenames);
+
+      // derive base URL for building URLs for newly uploaded images
+      if (urls.length > 0) {
+        const sample = String(urls[0]);
+        const idx = sample.indexOf("/uploads/");
+        if (idx !== -1) {
+          imageBaseRef.current = sample.substring(0, idx);
+        }
+      }
+
       context.setProgress(100);
     });
 
+    // RAM / WEIGHT / SIZE data
     fetchDataFromApi("/api/productWeight").then((res) => {
-      setProductWEIGHTData(res);
+      setProductWEIGHTData(res || []);
     });
     fetchDataFromApi("/api/productRAMS").then((res) => {
-      setProductRAMSData(res);
+      setProductRAMSData(res || []);
     });
     fetchDataFromApi("/api/productSIZE").then((res) => {
-      setProductSIZEData(res);
+      setProductSIZEData(res || []);
     });
-  }, []);
+  }, [id, context]);
 
   const handleChangeCategory = (event) => {
     const categoryId = event.target.value;
     setcategoryVal(categoryId);
-  
-    // reset subcategory when category changes
+
+    // reset sub category when category changes
     setSubCatVal("");
-  
+
     setFormFields((prev) => ({
       ...prev,
       category: categoryId,
       catId: categoryId,
       subCatId: "",
       subCat: "",
-      subCatName: ""
+      subCatName: "",
     }));
   };
 
   const handleChangeSubCategory = (event) => {
     const subCatId = event.target.value;
     setSubCatVal(subCatId);
-  
+
     const selectedSubCat = subCatData.find((sc) => sc._id === subCatId);
-  
+
     setFormFields((prev) => ({
       ...prev,
       subCatId: subCatId,
       subCat: selectedSubCat?.subCat || "",
-      subCatName: selectedSubCat?.subCat || ""
+      subCatName: selectedSubCat?.subCat || "",
     }));
-  };
-  
-  
-
-  const checkSubCatName = (subCatName) => {
-    formFields.subCatName = subCatName;
   };
 
   const handleChangeisFeaturedValue = (event) => {
     setisFeaturedValue(event.target.value);
-    setFormFields(() => ({
-      ...formFields,
+    setFormFields((prev) => ({
+      ...prev,
       isFeatured: event.target.value,
     }));
   };
 
   const handleChangeProductRams = (event) => {
-    // setProductRAMS(event.target.value);
-    // setFormFields(() => ({
-    //     ...formFields,
-    //     productRam: event.target.value
-    // }))
-
     const {
       target: { value },
     } = event;
-    setProductRAMS(
-      // On autofill we get a stringified value.
-      typeof value === "string" ? value.split(",") : value
-    );
-
-    formFields.productRam = value;
+    const val = typeof value === "string" ? value.split(",") : value;
+    setProductRAMS(val);
+    setFormFields((prev) => ({
+      ...prev,
+      productRam: val,
+    }));
   };
 
   const handleChangeProductWeight = (event) => {
-    // setProductWeight(event.target.value);
-    // setFormFields(() => ({
-    //     ...formFields,
-    //     productWeight: event.target.value
-    // }))
-
     const {
       target: { value },
     } = event;
-    setProductWeight(
-      // On autofill we get a stringified value.
-      typeof value === "string" ? value.split(",") : value
-    );
-
-    formFields.productWeight = value;
+    const val = typeof value === "string" ? value.split(",") : value;
+    setProductWeight(val);
+    setFormFields((prev) => ({
+      ...prev,
+      productWeight: val,
+    }));
   };
 
   const handleChangeProductSize = (event) => {
-    // setProductSize(event.target.value);
-    // setFormFields(() => ({
-    //     ...formFields,
-    //     size: event.target.value
-    // }))
-
     const {
       target: { value },
     } = event;
-    setProductSize(
-      // On autofill we get a stringified value.
-      typeof value === "string" ? value.split(",") : value
-    );
-
-    formFields.size = value;
+    const val = typeof value === "string" ? value.split(",") : value;
+    setProductSize(val);
+    setFormFields((prev) => ({
+      ...prev,
+      size: val,
+    }));
   };
 
   const inputChange = (e) => {
-    setFormFields(() => ({
-      ...formFields,
-      [e.target.name]: e.target.value,
+    const { name, value } = e.target;
+    setFormFields((prev) => ({
+      ...prev,
+      [name]: value,
     }));
   };
 
   const selectCat = (cat, id) => {
-    formFields.catName = cat;
-    formFields.catId = id;
+    setFormFields((prev) => ({
+      ...prev,
+      catName: cat,
+      catId: id,
+    }));
   };
 
-  let img_arr = [];
-  let uniqueArray = [];
+  // -------- NEW IMAGE UPLOAD (products API, no imageUpload dependency) --------
+  const onChangeFile = async (e) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
-  const onChangeFile = async (e, apiEndPoint) => {
-    try {
-      const files = e.target.files;
-      setUploading(true);
+    const formdata = new FormData();
 
-      //const fd = new FormData();
-      for (var i = 0; i < files.length; i++) {
-        // Validate file type
-        if (
-          files[i] &&
-          (files[i].type === "image/jpeg" ||
-            files[i].type === "image/jpg" ||
-            files[i].type === "image/png" ||
-            files[i].type === "image/webp")
-        ) {
-          const file = files[i];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
 
-          formdata.append(`images`, file);
-        } else {
-          context.setAlertBox({
-            open: true,
-            error: true,
-            msg: "Please select a valid JPG or PNG image file.",
-          });
-          setUploading(false);
-          return false;
-        }
+      if (
+        !["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(
+          file.type
+        )
+      ) {
+        context.setAlertBox({
+          open: true,
+          error: true,
+          msg: "Please select a valid JPG / PNG / WEBP image file.",
+        });
+        e.target.value = "";
+        return;
       }
-    } catch (error) {
-      console.log(error);
+
+      formdata.append("images", file);
     }
 
-    uploadImage(apiEndPoint, formdata).then((res) => {
-      fetchDataFromApi("/api/imageUpload").then((response) => {
-        if (
-          response !== undefined &&
-          response !== null &&
-          response !== "" &&
-          response.length !== 0
-        ) {
-          response.length !== 0 &&
-            response.map((item) => {
-              item?.images.length !== 0 &&
-                item?.images?.map((img) => {
-                  img_arr.push(img);
+    try {
+      setUploading(true);
 
-                  //console.log(img)
-                });
-            });
+      // POST /api/products/upload -> returns [filename, ...]
+      const res = await uploadImage("/api/products/upload", formdata);
 
-          uniqueArray = img_arr.filter(
-            (item, index) => img_arr.indexOf(item) === index
-          );
-          const appendedArray = [...previews, ...uniqueArray];
+      if (Array.isArray(res) && res.length > 0) {
+        // filenames for backend
+        setImageFiles((prev) => [...prev, ...res]);
 
-          setPreviews(appendedArray);
+        // build preview URLs
+        const base = imageBaseRef.current || "";
+        const newUrls = res.map((fn) =>
+          base ? `${base}/uploads/products/${fn}` : `/uploads/products/${fn}`
+        );
 
-          setTimeout(() => {
-            setUploading(false);
-            img_arr = [];
-            uniqueArray=[];
-            fetchDataFromApi("/api/imageUpload").then((res) => {
-              res?.map((item) => {
-                item?.images?.map((img) => {
-                  deleteImages(`/api/products/deleteImage?img=${img}`).then((res) => {
-                    //deleteData("/api/imageUpload/deleteAllImages");
-                  });
-                });
-              });
-            });
-            context.setAlertBox({
-              open: true,
-              error: false,
-              msg: "Images Uploaded!",
-            });
-          }, 500);
-        }
+        setPreviews((prev) => [...prev, ...newUrls]);
+
+        context.setAlertBox({
+          open: true,
+          error: false,
+          msg: "Images Uploaded!",
+        });
+      } else {
+        console.error("Unexpected upload response:", res);
+        context.setAlertBox({
+          open: true,
+          error: true,
+          msg: "Upload failed",
+        });
+      }
+    } catch (error) {
+      console.error("Upload error:", error);
+      context.setAlertBox({
+        open: true,
+        error: true,
+        msg: "Upload failed",
       });
-    });
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
   };
 
+  // -------- DELETE SINGLE IMAGE (products deleteImage + state) --------
   const removeImg = async (index, imgUrl) => {
-    const imgIndex = previews.indexOf(imgUrl);
+    try {
+      // If we have filenames array, use that; otherwise derive from URL
+      const filenameFromState = imageFiles[index];
+      const filename =
+        filenameFromState ||
+        (imgUrl ? String(imgUrl).split("/").pop() : null);
 
-    deleteImages(`/api/category/deleteImage?img=${imgUrl}`).then((res) => {
+      if (!filename) {
+        // just update state
+        setPreviews((prev) => prev.filter((_, i) => i !== index));
+        setImageFiles((prev) => prev.filter((_, i) => i !== index));
+        return;
+      }
+
+      await deleteImages(`/api/products/deleteImage?img=${filename}`);
+
+      setPreviews((prev) => prev.filter((_, i) => i !== index));
+      setImageFiles((prev) => prev.filter((_, i) => i !== index));
+
       context.setAlertBox({
         open: true,
         error: false,
         msg: "Image Deleted!",
       });
-    });
-
-    if (imgIndex > -1) {
-      // only splice array when item is found
-      previews.splice(index, 1); // 2nd parameter means remove one item only
+    } catch (err) {
+      console.error("Delete image error:", err);
+      context.setAlertBox({
+        open: true,
+        error: true,
+        msg: "Image delete failed",
+      });
     }
   };
 
   useEffect(() => {
-    formFields.location = context.selectedCountry;
+    setFormFields((prev) => ({
+      ...prev,
+      location: context.selectedCountry,
+    }));
   }, [context.selectedCountry]);
 
   const handleChangeLocation = (selectedOptions) => {
     setSelectedLocation(selectedOptions);
-    console.log(selectedOptions);
   };
 
+  // -------- SUBMIT EDITED PRODUCT --------
   const edit_Product = (e) => {
     e.preventDefault();
 
-    formFields.location = selectedLocation;
+    const payload = {
+      ...formFields,
+      location: selectedLocation,
+      images: imageFiles, // IMPORTANT: filenames only
+    };
 
-    const appendedArray = [...previews, ...uniqueArray];
-
-    img_arr = [];
-
-    formdata.append("name", formFields.name);
-    formdata.append("description", formFields.description);
-    formdata.append("brand", formFields.brand);
-    formdata.append("price", formFields.price);
-    formdata.append("oldPrice", formFields.oldPrice);
-    formdata.append("catName", formFields.catName);
-    formdata.append("catId", formFields.catId);
-    formdata.append("subCatId", formFields.subCatId);
-    formdata.append("category", formFields.category);
-    formdata.append("subCat", formFields.subCat);
-    formdata.append("countInStock", formFields.countInStock);
-    formdata.append("rating", formFields.rating);
-    formdata.append("isFeatured", formFields.isFeatured);
-    formdata.append("discount", formFields.discount);
-    formdata.append("productRam", formFields.productRam);
-    formdata.append("size", formFields.size);
-    formdata.append("productWeight", formFields.productWeight);
-    formdata.append("location", formFields.location);
-
-    formFields.images = appendedArray;
-    formFields.location = selectedLocation;
-
-    if (formFields.name === "") {
+    // ---- VALIDATIONS (same as your current code, just using payload) ----
+    if (!payload.name) {
       context.setAlertBox({
         open: true,
         msg: "please add product name",
         error: true,
       });
-      return false;
+      return;
     }
-
-    if (formFields.description === "") {
+    if (!payload.description) {
       context.setAlertBox({
         open: true,
         msg: "please add product description",
         error: true,
       });
-      return false;
+      return;
     }
-
-    if (formFields.brand === "") {
+    if (!payload.brand) {
       context.setAlertBox({
         open: true,
         msg: "please add product brand",
         error: true,
       });
-      return false;
+      return;
     }
-
-    if (formFields.price === null) {
+    if (payload.price == null) {
       context.setAlertBox({
         open: true,
         msg: "please add product price",
         error: true,
       });
-      return false;
+      return;
     }
-
-    if (formFields.oldPrice === null) {
+    if (payload.oldPrice == null) {
       context.setAlertBox({
         open: true,
         msg: "please add product oldPrice",
         error: true,
       });
-      return false;
+      return;
     }
-
-    if (formFields.category === "") {
+    if (!payload.category) {
       context.setAlertBox({
         open: true,
         msg: "please select a category",
         error: true,
       });
-      return false;
+      return;
     }
-
-    // if (formFields.subCat === "") {
-    //     context.setAlertBox({
-    //         open: true,
-    //         msg: 'please select sub category',
-    //         error: true
-    //     })
-    //     return false;
-    // }
-
-    if (formFields.countInStock === null) {
+    if (payload.countInStock == null) {
       context.setAlertBox({
         open: true,
         msg: "please add product count in stock",
         error: true,
       });
-      return false;
+      return;
     }
-
-    if (formFields.rating === 0) {
+    if (!payload.rating) {
       context.setAlertBox({
         open: true,
         msg: "please select product rating",
         error: true,
       });
-      return false;
+      return;
     }
-
-    if (formFields.isFeatured === null) {
+    if (payload.isFeatured == null) {
       context.setAlertBox({
         open: true,
         msg: "please select the product is a featured or not",
         error: true,
       });
-      return false;
+      return;
     }
-
-    if (formFields.discount === null) {
+    if (payload.discount == null) {
       context.setAlertBox({
         open: true,
         msg: "please select the product discount",
         error: true,
       });
-      return false;
+      return;
     }
-
-    if (previews.length === 0) {
+    if (!Array.isArray(payload.images) || payload.images.length === 0) {
       context.setAlertBox({
         open: true,
         msg: "please select images",
         error: true,
       });
-      return false;
+      return;
     }
 
     setIsLoading(true);
 
-    editData(`/api/products/${id}`, formFields).then((res) => {
-      context.setAlertBox({
-        open: true,
-        msg: "The product is updated!",
-        error: false,
+    editData(`/api/products/${id}`, payload)
+      .then((res) => {
+        context.setAlertBox({
+          open: true,
+          msg: "The product is updated!",
+          error: false,
+        });
+
+        setIsLoading(false);
+        deleteData("/api/imageUpload/deleteAllImages");
+        history("/products");
+      })
+      .catch((err) => {
+        console.error("Update product error:", err);
+        setIsLoading(false);
+        context.setAlertBox({
+          open: true,
+          msg: "Update failed",
+          error: true,
+        });
       });
-
-      setIsLoading(false);
-      deleteData("/api/imageUpload/deleteAllImages");
-
-      history("/products");
-    });
   };
 
   return (
@@ -643,29 +622,27 @@ const EditUpload = () => {
                     <div className="form-group">
                       <h6>CATEGORY</h6>
 
-                      {categoryVal !== "" && (
-                        <Select
-                          value={categoryVal}
-                          onChange={handleChangeCategory}
-                          displayEmpty
-                          inputProps={{ "aria-label": "Without label" }}
-                          className="w-100"
-                        >
-                          {context.catData?.categoryList?.length !== 0 &&
-                            context.catData?.categoryList?.map((cat, index) => {
-                              return (
-                                <MenuItem
-                                  className="text-capitalize"
-                                  value={cat._id}
-                                  key={index}
-                                  onClick={() => selectCat(cat.name, cat._id)}
-                                >
-                                  {cat.name}
-                                </MenuItem>
-                              );
-                            })}
-                        </Select>
-                      )}
+                      <Select
+                        value={categoryVal}
+                        onChange={handleChangeCategory}
+                        displayEmpty
+                        inputProps={{ "aria-label": "Without label" }}
+                        className="w-100"
+                      >
+                        <MenuItem value="">
+                          <em>None</em>
+                        </MenuItem>
+                        {context.catData?.categoryList?.map((cat, index) => (
+                          <MenuItem
+                            className="text-capitalize"
+                            value={cat._id}
+                            key={index}
+                            onClick={() => selectCat(cat.name, cat._id)}
+                          >
+                            {cat.name}
+                          </MenuItem>
+                        ))}
+                      </Select>
                     </div>
                   </div>
 
@@ -674,28 +651,27 @@ const EditUpload = () => {
                       <h6>SUB CATEGORY</h6>
 
                       <Select
-  value={subCatVal}
-  onChange={handleChangeSubCategory}
-  displayEmpty
-  inputProps={{ "aria-label": "Without label" }}
-  className="w-100"
->
-  <MenuItem value="">
-    <em value={null}>None</em>
-  </MenuItem>
-  {subCatData
-    ?.filter((sc) => sc.category?._id === categoryVal) // ✅ only show subs for selected category
-    .map((subCat, index) => (
-      <MenuItem
-        className="text-capitalize"
-        value={subCat._id}
-        key={index}
-      >
-        {subCat.subCat} {/* ✅ correct field */}
-      </MenuItem>
-    ))}
-</Select>
-
+                        value={subCatVal}
+                        onChange={handleChangeSubCategory}
+                        displayEmpty
+                        inputProps={{ "aria-label": "Without label" }}
+                        className="w-100"
+                      >
+                        <MenuItem value="">
+                          <em value={null}>None</em>
+                        </MenuItem>
+                        {subCatData
+                          ?.filter((sc) => sc.category?._id === categoryVal)
+                          .map((subCat, index) => (
+                            <MenuItem
+                              className="text-capitalize"
+                              value={subCat._id}
+                              key={index}
+                            >
+                              {subCat.subCat}
+                            </MenuItem>
+                          ))}
+                      </Select>
                     </div>
                   </div>
 
@@ -793,13 +769,11 @@ const EditUpload = () => {
                         className="w-100"
                         MenuProps={MenuProps}
                       >
-                        {productRAMSData?.map((item, index) => {
-                          return (
-                            <MenuItem value={item.productRam}>
-                              {item.productRam}
-                            </MenuItem>
-                          );
-                        })}
+                        {productRAMSData?.map((item, index) => (
+                          <MenuItem value={item.productRam} key={index}>
+                            {item.productRam}
+                          </MenuItem>
+                        ))}
                       </Select>
                     </div>
                   </div>
@@ -817,13 +791,11 @@ const EditUpload = () => {
                         MenuProps={MenuProps}
                         className="w-100"
                       >
-                        {productWEIGHTData?.map((item, index) => {
-                          return (
-                            <MenuItem value={item.productWeight}>
-                              {item.productWeight}
-                            </MenuItem>
-                          );
-                        })}
+                        {productWEIGHTData?.map((item, index) => (
+                          <MenuItem value={item.productWeight} key={index}>
+                            {item.productWeight}
+                          </MenuItem>
+                        ))}
                       </Select>
                     </div>
                   </div>
@@ -839,11 +811,11 @@ const EditUpload = () => {
                         MenuProps={MenuProps}
                         className="w-100"
                       >
-                        {productSIZEData?.map((item, index) => {
-                          return (
-                            <MenuItem value={item.size}>{item.size}</MenuItem>
-                          );
-                        })}
+                        {productSIZEData?.map((item, index) => (
+                          <MenuItem value={item.size} key={index}>
+                            {item.size}
+                          </MenuItem>
+                        ))}
                       </Select>
                     </div>
                   </div>
@@ -856,8 +828,8 @@ const EditUpload = () => {
                         value={ratingsValue}
                         onChange={(event, newValue) => {
                           setRatingValue(newValue);
-                          setFormFields(() => ({
-                            ...formFields,
+                          setFormFields((prev) => ({
+                            ...prev,
                             rating: newValue,
                           }));
                         }}
@@ -889,35 +861,34 @@ const EditUpload = () => {
             </div>
           </div>
 
+          {/* Media & Published */}
           <div className="card p-4 mt-0">
             <div className="imagesUploadSec">
-              <h5 class="mb-4">Media And Published</h5>
+              <h5 className="mb-4">Media And Published</h5>
 
               <div className="imgUploadBox d-flex align-items-center">
-                {previews?.length !== 0 &&
-                  previews?.map((img, index) => {
-                    return (
-                      <div className="uploadBox" key={index}>
-                        <span
-                          className="remove"
-                          onClick={() => removeImg(index, img)}
-                        >
-                          <IoCloseSharp />
-                        </span>
-                        <div className="box">
-                          <LazyLoadImage
-                            alt={"image"}
-                            effect="blur"
-                            className="w-100"
-                            src={img}
-                          />
-                        </div>
+                {previews?.length > 0 &&
+                  previews.map((img, index) => (
+                    <div className="uploadBox" key={index}>
+                      <span
+                        className="remove"
+                        onClick={() => removeImg(index, img)}
+                      >
+                        <IoCloseSharp />
+                      </span>
+                      <div className="box">
+                        <LazyLoadImage
+                          alt={"image"}
+                          effect="blur"
+                          className="w-100"
+                          src={img}
+                        />
                       </div>
-                    );
-                  })}
+                    </div>
+                  ))}
 
                 <div className="uploadBox">
-                  {uploading === true ? (
+                  {uploading ? (
                     <div className="progressBar text-center d-flex align-items-center justify-content-center flex-column">
                       <CircularProgress />
                       <span>Uploading...</span>
@@ -927,9 +898,7 @@ const EditUpload = () => {
                       <input
                         type="file"
                         multiple
-                        onChange={(e) =>
-                          onChangeFile(e, "/api/category/upload")
-                        }
+                        onChange={onChangeFile}
                         name="images"
                       />
                       <div className="info">
@@ -943,13 +912,17 @@ const EditUpload = () => {
 
               <br />
 
-              <Button type="submit" className="btn-blue btn-lg btn-big w-100">
-                <FaCloudUploadAlt /> &nbsp;{" "}
-                {isLoading === true ? (
+              <Button
+                type="submit"
+                className="btn-blue btn-lg btn-big w-100"
+                disabled={isLoading}
+              >
+                <FaCloudUploadAlt /> &nbsp;
+                {isLoading ? (
                   <CircularProgress color="inherit" className="loader" />
                 ) : (
                   "PUBLISH AND VIEW"
-                )}{" "}
+                )}
               </Button>
             </div>
           </div>
