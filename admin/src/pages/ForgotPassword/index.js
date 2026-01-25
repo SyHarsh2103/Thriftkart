@@ -1,3 +1,4 @@
+// admin/src/pages/ForgotPassword/index.jsx
 import { useContext, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Button from "@mui/material/Button";
@@ -41,7 +42,7 @@ const ForgotPassword = () => {
   const history = useNavigate();
 
   useEffect(() => {
-    // Hide admin chrome on auth page
+    // Hide admin chrome on auth pages
     context?.setisHideSidebarAndHeader?.(true);
 
     const token = localStorage.getItem("token");
@@ -53,7 +54,6 @@ const ForgotPassword = () => {
       user = null;
     }
 
-    // Only auto-redirect if we *know* this is an admin user
     if (token && user?.isAdmin) {
       history("/dashboard");
     }
@@ -61,6 +61,7 @@ const ForgotPassword = () => {
   }, []);
 
   const focusInput = (index) => setInputIndex(index);
+
   const onChangeInput = (e) => {
     const { name, value } = e.target;
     setFormfields((prev) => ({ ...prev, [name]: value }));
@@ -230,7 +231,7 @@ const ForgotPassword = () => {
           error: false,
           msg: res?.message || "OTP sent again",
         });
-        setResetToken(null); // new OTP → must verify again
+        setResetToken(null);
       } else {
         context.setAlertBox({
           open: true,
@@ -253,222 +254,286 @@ const ForgotPassword = () => {
   return (
     <>
       <img src={patern} className="loginPatern" alt="pattern" />
-      <section className="loginSection">
-        <div className="loginBox">
-          <Link
-            to={"/"}
-            className="d-flex align-items-center flex-column logo"
-          >
-            <img src={Logo} alt="Thriftkart logo" />
-            <span className="ml-2">
-              {step === 1 ? "FORGOT PASSWORD" : "RESET PASSWORD"}
-            </span>
-          </Link>
 
-          <div className="wrapper mt-3 card border">
-            <h2 className="mb-4 text-center">
-              {step === 1
-                ? "Forgot your password?"
-                : "Verify OTP & Set New Password"}
-            </h2>
-
-            {step === 1 && (
-              <form onSubmit={handleSendOtp}>
-                <div
-                  className={`form-group position-relative ${
-                    inputIndex === 0 ? "focus" : ""
-                  }`}
-                >
-                  <span className="icon">
-                    <MdEmail />
-                  </span>
-                  <input
-                    type="email"
-                    className="form-control"
-                    placeholder="enter your email"
-                    onFocus={() => focusInput(0)}
-                    onBlur={() => setInputIndex(null)}
-                    autoFocus
-                    name="email"
-                    value={formfields.email}
-                    onChange={onChangeInput}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <Button
-                    type="submit"
-                    className="btn-blue btn-lg w-100 btn-big"
-                    disabled={!canSubmitStep1 || isLoading}
+      <section className="loginSection signUpSection">
+        <div className="container">
+          <div className="row justify-content-center">
+            <div className="col-md-10">
+              <div className="row signupCard">
+                {/* LEFT: Forgot / Reset form */}
+                <div className="col-md-6 signupLeft d-flex flex-column justify-content-center">
+                  <Link
+                    to={"/"}
+                    className="d-flex align-items-center flex-column logo mb-3"
                   >
-                    {isLoading ? <CircularProgress size={24} /> : "Send OTP"}
-                  </Button>
-                </div>
-
-                <div className="form-group text-center mb-0">
-                  <Link to={"/login"} className="link">
-                    Back to Login
+                    <img src={Logo} alt="Thriftkart logo" />
+                    <span className="ml-2 signup-title">
+                      {step === 1 ? "Forgot Password" : "Reset Password"}
+                    </span>
                   </Link>
-                </div>
-              </form>
-            )}
 
-            {step === 2 && (
-              <form onSubmit={handleResetPassword}>
-                {/* Email (locked) */}
-                <div
-                  className={`form-group position-relative ${
-                    inputIndex === 0 ? "focus" : ""
-                  }`}
-                >
-                  <span className="icon">
-                    <MdEmail />
-                  </span>
-                  <input
-                    type="email"
-                    className="form-control"
-                    placeholder="enter your email"
-                    onFocus={() => focusInput(0)}
-                    onBlur={() => setInputIndex(null)}
-                    name="email"
-                    value={formfields.email}
-                    onChange={onChangeInput}
-                    disabled
-                  />
-                </div>
+                  <div className="wrapper mt-2">
+                    <h4 className="mb-3 font-weight-bold">
+                      {step === 1
+                        ? "Forgot your admin password?"
+                        : "Enter OTP & set a new password"}
+                    </h4>
 
-                {/* OTP */}
-                <div
-                  className={`form-group position-relative ${
-                    inputIndex === 1 ? "focus" : ""
-                  }`}
-                >
-                  <span className="icon">
-                    <IoShieldCheckmarkSharp />
-                  </span>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="enter OTP"
-                    onFocus={() => focusInput(1)}
-                    onBlur={() => setInputIndex(null)}
-                    name="otp"
-                    value={formfields.otp}
-                    onChange={onChangeInput}
-                  />
-                </div>
+                    {step === 1 && (
+                      <form onSubmit={handleSendOtp}>
+                        <div
+                          className={`form-group position-relative ${
+                            inputIndex === 0 ? "focus" : ""
+                          }`}
+                        >
+                          <span className="icon">
+                            <MdEmail />
+                          </span>
+                          <input
+                            type="email"
+                            className="form-control"
+                            placeholder="enter your admin email"
+                            onFocus={() => focusInput(0)}
+                            onBlur={() => setInputIndex(null)}
+                            autoFocus
+                            name="email"
+                            value={formfields.email}
+                            onChange={onChangeInput}
+                          />
+                        </div>
 
-                <div className="form-group">
-                  <Button
-                    type="button"
-                    className="btn-outline w-100 btn-big"
-                    onClick={handleVerifyOtp}
-                    disabled={isLoading || !formfields.otp.trim()}
-                  >
-                    {isLoading ? (
-                      <CircularProgress size={24} />
-                    ) : resetToken ? (
-                      "OTP Verified"
-                    ) : (
-                      "Verify OTP"
+                        <div className="form-group">
+                          <Button
+                            type="submit"
+                            className="btn-blue btn-lg w-100 btn-big"
+                            disabled={!canSubmitStep1 || isLoading}
+                          >
+                            {isLoading ? (
+                              <CircularProgress size={24} />
+                            ) : (
+                              "Send OTP"
+                            )}
+                          </Button>
+                        </div>
+
+                        <div className="form-group d-flex justify-content-between align-items-center">
+                          <Link to={"/login"} className="link" style={{ fontSize: 13 }}>
+                            Back to Login
+                          </Link>
+                          <span style={{ fontSize: 13, color: "#777" }}>
+                            Remember your password?{" "}
+                            <Link to={"/login"} className="link color ml-1">
+                              Sign In
+                            </Link>
+                          </span>
+                        </div>
+
+                        <div className="form-group text-center mb-0">
+                          <span style={{ fontSize: 13 }}>
+                            Don't have an account?
+                            <Link to={"/signUp"} className="link color ml-2">
+                              Register
+                            </Link>
+                          </span>
+                        </div>
+                      </form>
                     )}
-                  </Button>
-                </div>
 
-                {/* New Password */}
-                <div
-                  className={`form-group position-relative ${
-                    inputIndex === 2 ? "focus" : ""
-                  }`}
-                >
-                  <span className="icon">
-                    <RiLockPasswordFill />
-                  </span>
-                  <input
-                    type={isShowPassword ? "text" : "password"}
-                    className="form-control"
-                    placeholder="enter new password"
-                    onFocus={() => focusInput(2)}
-                    onBlur={() => setInputIndex(null)}
-                    name="newPassword"
-                    value={formfields.newPassword}
-                    onChange={onChangeInput}
-                  />
-                  <span
-                    className="toggleShowPassword"
-                    onClick={() => setIsShowPassword((p) => !p)}
-                  >
-                    {isShowPassword ? <IoMdEyeOff /> : <IoMdEye />}
-                  </span>
-                </div>
+                    {step === 2 && (
+                      <form onSubmit={handleResetPassword}>
+                        {/* Email (locked) */}
+                        <div
+                          className={`form-group position-relative ${
+                            inputIndex === 0 ? "focus" : ""
+                          }`}
+                        >
+                          <span className="icon">
+                            <MdEmail />
+                          </span>
+                          <input
+                            type="email"
+                            className="form-control"
+                            placeholder="enter your email"
+                            onFocus={() => focusInput(0)}
+                            onBlur={() => setInputIndex(null)}
+                            name="email"
+                            value={formfields.email}
+                            onChange={onChangeInput}
+                            disabled
+                          />
+                        </div>
 
-                {/* Confirm Password */}
-                <div
-                  className={`form-group position-relative ${
-                    inputIndex === 3 ? "focus" : ""
-                  }`}
-                >
-                  <span className="icon">
-                    <RiLockPasswordFill />
-                  </span>
-                  <input
-                    type={isShowConfirmPassword ? "text" : "password"}
-                    className="form-control"
-                    placeholder="confirm new password"
-                    onFocus={() => focusInput(3)}
-                    onBlur={() => setInputIndex(null)}
-                    name="confirmPassword"
-                    value={formfields.confirmPassword}
-                    onChange={onChangeInput}
-                  />
-                  <span
-                    className="toggleShowPassword"
-                    onClick={() => setIsShowConfirmPassword((p) => !p)}
-                  >
-                    {isShowConfirmPassword ? <IoMdEyeOff /> : <IoMdEye />}
-                  </span>
-                </div>
+                        {/* OTP */}
+                        <div
+                          className={`form-group position-relative ${
+                            inputIndex === 1 ? "focus" : ""
+                          }`}
+                        >
+                          <span className="icon">
+                            <IoShieldCheckmarkSharp />
+                          </span>
+                          <input
+                            type="text"
+                            className="form-control"
+                            placeholder="enter OTP"
+                            onFocus={() => focusInput(1)}
+                            onBlur={() => setInputIndex(null)}
+                            name="otp"
+                            value={formfields.otp}
+                            onChange={onChangeInput}
+                          />
+                        </div>
 
-                <div className="form-group">
-                  <Button
-                    type="submit"
-                    className="btn-blue btn-lg w-100 btn-big"
-                    disabled={!canSubmitStep2 || isLoading || !resetToken}
-                  >
-                    {isLoading ? (
-                      <CircularProgress size={24} />
-                    ) : (
-                      "Reset Password"
+                        <div className="form-group">
+                          <Button
+                            type="button"
+                            className="btn-outline w-100 btn-big"
+                            onClick={handleVerifyOtp}
+                            disabled={isLoading || !formfields.otp.trim()}
+                          >
+                            {isLoading ? (
+                              <CircularProgress size={24} />
+                            ) : resetToken ? (
+                              "OTP Verified"
+                            ) : (
+                              "Verify OTP"
+                            )}
+                          </Button>
+                        </div>
+
+                        {/* New Password */}
+                        <div
+                          className={`form-group position-relative ${
+                            inputIndex === 2 ? "focus" : ""
+                          }`}
+                        >
+                          <span className="icon">
+                            <RiLockPasswordFill />
+                          </span>
+                          <input
+                            type={isShowPassword ? "text" : "password"}
+                            className="form-control"
+                            placeholder="enter new password"
+                            onFocus={() => focusInput(2)}
+                            onBlur={() => setInputIndex(null)}
+                            name="newPassword"
+                            value={formfields.newPassword}
+                            onChange={onChangeInput}
+                          />
+                          <span
+                            className="toggleShowPassword"
+                            onClick={() =>
+                              setIsShowPassword((prev) => !prev)
+                            }
+                          >
+                            {isShowPassword ? <IoMdEyeOff /> : <IoMdEye />}
+                          </span>
+                        </div>
+
+                        {/* Confirm Password */}
+                        <div
+                          className={`form-group position-relative ${
+                            inputIndex === 3 ? "focus" : ""
+                          }`}
+                        >
+                          <span className="icon">
+                            <RiLockPasswordFill />
+                          </span>
+                          <input
+                            type={isShowConfirmPassword ? "text" : "password"}
+                            className="form-control"
+                            placeholder="confirm new password"
+                            onFocus={() => focusInput(3)}
+                            onBlur={() => setInputIndex(null)}
+                            name="confirmPassword"
+                            value={formfields.confirmPassword}
+                            onChange={onChangeInput}
+                          />
+                          <span
+                            className="toggleShowPassword"
+                            onClick={() =>
+                              setIsShowConfirmPassword((prev) => !prev)
+                            }
+                          >
+                            {isShowConfirmPassword ? (
+                              <IoMdEyeOff />
+                            ) : (
+                              <IoMdEye />
+                            )}
+                          </span>
+                        </div>
+
+                        <div className="form-group">
+                          <Button
+                            type="submit"
+                            className="btn-blue btn-lg w-100 btn-big"
+                            disabled={!canSubmitStep2 || isLoading || !resetToken}
+                          >
+                            {isLoading ? (
+                              <CircularProgress size={24} />
+                            ) : (
+                              "Reset Password"
+                            )}
+                          </Button>
+                        </div>
+
+                        <div className="form-group d-flex justify-content-between align-items-center">
+                          <Button
+                            variant="text"
+                            className="link p-0"
+                            type="button"
+                            onClick={resendOtp}
+                            disabled={isLoading}
+                            style={{ fontSize: 13 }}
+                          >
+                            Resend OTP
+                          </Button>
+                          <Link
+                            to={"/login"}
+                            className="link"
+                            style={{ fontSize: 13 }}
+                          >
+                            Back to Login
+                          </Link>
+                        </div>
+
+                        <div className="form-group text-center mb-0">
+                          <span style={{ fontSize: 13 }}>
+                            Don't have an account?
+                            <Link to={"/signUp"} className="link color ml-2">
+                              Register
+                            </Link>
+                          </span>
+                        </div>
+                      </form>
                     )}
-                  </Button>
+                  </div>
                 </div>
 
-                <div className="form-group text-center mb-0">
-                  <Button
-                    variant="text"
-                    className="link"
-                    type="button"
-                    onClick={resendOtp}
-                    disabled={isLoading}
-                  >
-                    Resend OTP
-                  </Button>
-                  <span className="mx-2">•</span>
-                  <Link to={"/login"} className="link">
-                    Back to Login
-                  </Link>
+                {/* RIGHT: Info / helper panel */}
+                <div className="col-md-6 signupRight d-flex flex-column justify-content-center">
+                  <h2 className="signup-heading">
+                    Secure access to your Thriftkart Admin
+                  </h2>
+                  <p className="signup-text">
+                    Forgotten passwords happen. Use your registered admin email
+                    to receive an OTP, verify it, and create a new password in
+                    a few simple steps.
+                  </p>
+                  <ul className="signup-bullets">
+                    <li>Only verified admin accounts can reset passwords.</li>
+                    <li>OTP is valid for a short time to keep your account safe.</li>
+                    <li>
+                      Choose a strong password (at least 6 characters,
+                      preferably more).
+                    </li>
+                    <li>
+                      Never share your OTP or admin credentials with anyone.
+                    </li>
+                  </ul>
                 </div>
-              </form>
-            )}
-          </div>
-
-          <div className="wrapper mt-3 card border footer p-3">
-            <span className="text-center">
-              Don't have an account?
-              <Link to={"/signUp"} className="link color ml-2">
-                Register
-              </Link>
-            </span>
+              </div>
+            </div>
           </div>
         </div>
       </section>

@@ -1,3 +1,4 @@
+// admin/src/pages/VerifyAccount/index.jsx
 import { useContext, useEffect, useState } from "react";
 import Logo from "../../assets/images/logo.png";
 import patern from "../../assets/images/pattern.webp";
@@ -30,8 +31,7 @@ const VerifyAccount = () => {
       });
       navigate("/login");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userEmail]);
+  }, [userEmail, context, navigate]);
 
   const handleOtpChange = (value) => {
     setOtp(value);
@@ -140,50 +140,92 @@ const VerifyAccount = () => {
   return (
     <>
       <img src={patern} className="loginPatern" alt="" />
-      <section className="loginSection">
-        <div className="loginBox">
-          <Link to={"/"} className="d-flex align-items-center flex-column logo">
-            <img src={Logo} alt="Logo" />
-            <span className="ml-2">ECOMMERCE</span>
-          </Link>
 
-          <div className="wrapper mt-3 card border text-center">
-            <form onSubmit={verify}>
-              <img src={"/shield.png"} width="80px" alt="shield" />
-              <p className="text-center mt-3">
-                OTP has been sent to <b>{userEmail}</b>
-              </p>
+      <section className="loginSection signUpSection">
+        <div className="container">
+          <div className="row justify-content-center">
+            <div className="col-md-10">
+              <div className="row signupCard">
+                {/* LEFT: OTP verification card */}
+                <div className="col-md-6 signupLeft d-flex flex-column justify-content-center">
+                  <Link
+                    to={"/"}
+                    className="d-flex align-items-center flex-column logo mb-3"
+                  >
+                    <img src={Logo} alt="Logo" />
+                    <span className="ml-2 signup-title">VERIFY ACCOUNT</span>
+                  </Link>
 
-              <OtpBox length={6} onChange={handleOtpChange} />
+                  <div className="wrapper mt-2 card border text-center">
+                    <form onSubmit={verify}>
+                      <img src={"/shield.png"} width="80px" alt="shield" />
+                      <p className="text-center mt-3">
+                        OTP has been sent to <b>{userEmail}</b>
+                      </p>
 
-              <div className="form-group mt-3 row">
-                <Button
-                  type="submit"
-                  className="btn-blue btn-lg w-100 btn-big"
-                  disabled={isLoading}
-                >
-                  {isLoading ? <CircularProgress size={24} /> : "Verify OTP"}
-                </Button>
+                      <OtpBox length={6} onChange={handleOtpChange} />
+
+                      <div className="form-group mt-3">
+                        <Button
+                          type="submit"
+                          className="btn-blue btn-lg w-100 btn-big"
+                          disabled={isLoading}
+                        >
+                          {isLoading ? (
+                            <CircularProgress size={24} />
+                          ) : (
+                            "Verify OTP"
+                          )}
+                        </Button>
+                      </div>
+
+                      <div className="form-group d-flex justify-content-between align-items-center mt-2">
+                        <Button
+                          type="button"
+                          variant="text"
+                          className="link color p-0"
+                          onClick={resendOtp}
+                          disabled={isLoading}
+                          style={{ fontSize: 13 }}
+                        >
+                          Resend OTP
+                        </Button>
+                        <Link
+                          to={"/login"}
+                          className="link color"
+                          style={{ fontSize: 13 }}
+                        >
+                          Back to Login
+                        </Link>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+
+                {/* RIGHT: Info / security panel */}
+                <div className="col-md-6 signupRight d-flex flex-column justify-content-center">
+                  <h2 className="signup-heading">
+                    Verify your Thriftkart admin email
+                  </h2>
+                  <p className="signup-text">
+                    To keep your admin panel secure, we verify every new admin
+                    email with a one-time password (OTP). Enter the 6-digit code
+                    you received and complete your account activation.
+                  </p>
+                  <ul className="signup-bullets">
+                    <li>Check your inbox and spam folder for the OTP email.</li>
+                    <li>The OTP is valid for a limited time for your security.</li>
+                    <li>
+                      Do not share your OTP or admin account details with anyone.
+                    </li>
+                    <li>
+                      If you didn't receive the mail, use the{" "}
+                      <strong>Resend OTP</strong> option.
+                    </li>
+                  </ul>
+                </div>
               </div>
-            </form>
-          </div>
-
-          <div className="wrapper mt-3 card border footer p-3">
-            <span className="text-center d-flex flex-column flex-md-row justify-content-center">
-              <Button
-                type="button"
-                variant="text"
-                className="link color"
-                onClick={resendOtp}
-                disabled={isLoading}
-              >
-                Resend OTP
-              </Button>
-              <span className="mx-2 d-none d-md-inline">•</span>
-              <Link to={"/login"} className="link color ml-md-2 mt-2 mt-md-0">
-                Back to Login
-              </Link>
-            </span>
+            </div>
           </div>
         </div>
       </section>
