@@ -2,7 +2,7 @@ import Rating from "@mui/material/Rating";
 import { TfiFullscreen } from "react-icons/tfi";
 import Button from "@mui/material/Button";
 import { IoMdHeartEmpty } from "react-icons/io";
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { MyContext } from "../../App";
 import { Link } from "react-router-dom";
 
@@ -12,77 +12,69 @@ import { fetchDataFromApi, postData } from "../../utils/api";
 import { FaHeart } from "react-icons/fa";
 
 const ProductItem = (props) => {
-  const { item, itemView } = props;
-
+  const [isHovered, setIsHovered] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [isAddedToMyList, setIsAddedToMyList] = useState(false);
+  const [isAddedToMyList, setSsAddedToMyList] = useState(false);
 
   const context = useContext(MyContext);
+  const sliderRef = useRef();
 
-  // ✅ Always use plural `/products/:id` and Mongo _id
-  const productId =
-    itemView === "recentlyView" ? item?.prodId : item?._id;
-
-  const name = item?.name || "";
-  const truncatedName =
-    name.length > 45 ? name.substring(0, 45) + "..." : name;
-
-  const primaryImage = item?.images?.[0];
-  const secondaryImage = item?.images?.[1];
+  // Helper to safely parse user and avoid JSON.parse(null) error
+  const getCurrentUser = () => {
+    try {
+      const userStr = localStorage.getItem("user");
+      if (!userStr) return null;
+      return JSON.parse(userStr);
+    } catch {
+      return null;
+    }
+  };
 
   const viewProductDetails = (id) => {
     context.openProductDetailsModal(id, true);
   };
 
   const handleMouseEnter = (id) => {
-    if (!id) return;
-
-    const userStr = localStorage.getItem("user");
-    if (!userStr) return;
-
-    let user;
-    try {
-      user = JSON.parse(userStr);
-    } catch {
-      user = null;
-    }
-    if (!user?.userId) return;
-
-    fetchDataFromApi(`/api/my-list?productId=${id}&userId=${user.userId}`)
-      .then((res) => {
-        if (Array.isArray(res) && res.length > 0) {
-          setIsAddedToMyList(true);
+    if (!isLoading) {
+      setIsHovered(true);
+      setTimeout(() => {
+        if (sliderRef.current) {
+          sliderRef.current.slickPlay?.();
         }
-      })
-      .catch(() => {});
+      }, 20);
+    }
+
+    const user = getCurrentUser();
+    if (!user?.userId) return; // only check My List if logged in
+
+    fetchDataFromApi(`/api/my-list?productId=${id}&userId=${user.userId}`).then(
+      (res) => {
+        if (Array.isArray(res) && res.length !== 0) {
+          setSsAddedToMyList(true);
+        }
+      }
+    );
   };
 
   const handleMouseLeave = () => {
-    // no-op for now; layout only
+    if (!isLoading) {
+      setIsHovered(false);
+      setTimeout(() => {
+        if (sliderRef.current) {
+          sliderRef.current.slickPause?.();
+        }
+      }, 20);
+    }
   };
 
   useEffect(() => {
-    const timer = setTimeout(() => setIsLoading(false), 500);
-    return () => clearTimeout(timer);
+    // small skeleton delay so cards don’t flash too fast
+    const t = setTimeout(() => setIsLoading(false), 500);
+    return () => clearTimeout(t);
   }, []);
 
   const addToMyList = (id) => {
-    const userStr = localStorage.getItem("user");
-    if (!userStr) {
-      context.setAlertBox({
-        open: true,
-        error: true,
-        msg: "Please Login to continue",
-      });
-      return;
-    }
-
-    let user;
-    try {
-      user = JSON.parse(userStr);
-    } catch {
-      user = null;
-    }
+    const user = getCurrentUser();
     if (!user?.userId) {
       context.setAlertBox({
         open: true,
@@ -93,10 +85,10 @@ const ProductItem = (props) => {
     }
 
     const data = {
-      productTitle: item?.name,
-      image: item?.images?.[0],
-      rating: item?.rating,
-      price: item?.price,
+      productTitle: props?.item?.name,
+      image: props.item?.images?.[0],
+      rating: props?.item?.rating,
+      price: props?.item?.price,
       productId: id,
       userId: user.userId,
     };
@@ -113,7 +105,7 @@ const ProductItem = (props) => {
           `/api/my-list?productId=${id}&userId=${user.userId}`
         ).then((res2) => {
           if (Array.isArray(res2) && res2.length !== 0) {
-            setIsAddedToMyList(true);
+            setSsAddedToMyList(true);
           }
         });
       } else {
@@ -126,126 +118,183 @@ const ProductItem = (props) => {
     });
   };
 
+  // ✅ Always use plural `/products/:id` and Mongo _id
+  const productId =
+    props?.itemView === "recentlyView" ? props.item?.prodId : props.item?._id;
+
+  // ------- UI helpers for layout -------
+  const name = props?.item?.name || "";
+  const displayName =
+    name.length > 60 ? `${name.substring(0, 60).trim()}…` : name;
+
+  const countInStock = props?.item?.countInStock ?? 0;
+  const inStock = countInStock > 0;
+  const isLowStock = inStock && countInStock <= 5;
+
+  const parseNumber = (val) => {
+    const num = Number(val);
+    return Number.isFinite(num) ? num : null;
+  };
+
+  const price = parseNumber(props?.item?.price);
+  const oldPrice = parseNumber(props?.item?.oldPrice);
+  const hasOldPrice = oldPrice !== null && price !== null && oldPrice > price;
+
+  const saving =
+    hasOldPrice && oldPrice !== null && price !== null
+      ? oldPrice - price
+      : null;
+
+  const explicitDiscount = parseNumber(props?.item?.discount);
+  const computedDiscount =
+    hasOldPrice && oldPrice
+      ? Math.round(((oldPrice - price) / oldPrice) * 100)
+      : null;
+
+  const discount = explicitDiscount || computedDiscount;
+
+  const ratingValue = parseNumber(props?.item?.rating) || 0;
+  const ratingCount =
+    props?.item?.numReviews ?? props?.item?.reviewsCount ?? null;
+
+  const formatCurrency = (val) => {
+    const num = parseNumber(val);
+    if (num === null) return "-";
+    return num.toLocaleString("en-IN");
+  };
+
   return (
     <div
-      className={`productItem ${itemView}`}
+      className={`productItem ${props.itemView || ""}`}
       onMouseEnter={() => handleMouseEnter(productId)}
       onMouseLeave={handleMouseLeave}
     >
       <div className="productCard-inner">
-        {/* IMAGE / MEDIA AREA */}
-        <div className="product-media">
-          {/* Top badges row: discount + wishlist */}
-          <div className="product-badges">
-            {item?.discount ? (
-              <span className="badge badge-primary discount-badge">
-                {item.discount}% OFF
-              </span>
-            ) : null}
-
-            <button
-              type="button"
-              className={`wishlist-btn ${
-                isAddedToMyList ? "active" : ""
-              }`}
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                addToMyList(productId);
-              }}
-            >
-              {isAddedToMyList ? (
-                <FaHeart style={{ fontSize: 18 }} />
-              ) : (
-                <IoMdHeartEmpty style={{ fontSize: 18 }} />
-              )}
-            </button>
-          </div>
-
-          <Link
-            to={`/products/${productId}`}
-            className="product-media-link"
-          >
-            {isLoading ? (
-              <div className="product-skeleton">
+        {/* Image / Media */}
+        <div className="img_rapper">
+          <Link to={`/products/${productId}`}>
+            <div className="productItemSliderWrapper">
+              {isLoading ? (
                 <Skeleton
                   variant="rectangular"
                   width="100%"
-                  height={260}
+                  height={230}
+                  className="product-skeleton"
                 >
                   <IoIosImages />
                 </Skeleton>
-              </div>
-            ) : (
-              <>
-                {primaryImage && (
+              ) : (
+                <>
                   <img
-                    src={primaryImage}
+                    src={props.item?.images?.[0]}
+                    className="w-100 img1"
                     alt={name}
-                    className="w-100 product-img primary"
                   />
-                )}
-                {secondaryImage && (
-                  <img
-                    src={secondaryImage}
-                    alt={name}
-                    className="w-100 product-img secondary"
-                  />
-                )}
-              </>
-            )}
+                  {props.item?.images?.length > 1 && (
+                    <img
+                      src={props.item?.images?.[1]}
+                      className="w-100 img2"
+                      alt={name}
+                    />
+                  )}
+                </>
+              )}
+            </div>
           </Link>
 
-          {/* Quick view overlay */}
-          <div className="product-overlay-actions">
-            <Button
-              size="small"
-              className="quick-view-btn"
-              onClick={() => viewProductDetails(productId)}
-            >
+          {/* Badge top-left */}
+          {discount ? (
+            <span className="badge badge-primary product-discount-badge">
+              {discount}% OFF
+            </span>
+          ) : inStock ? (
+            <span className="badge bg-success product-discount-badge">
+              In Stock
+            </span>
+          ) : null}
+
+          {/* Hover actions top-right */}
+          <div className="actions product-card-actions">
+            <Button onClick={() => viewProductDetails(productId)}>
               <TfiFullscreen />
+            </Button>
+
+            <Button
+              className={isAddedToMyList ? "active" : ""}
+              onClick={() => addToMyList(productId)}
+            >
+              {isAddedToMyList ? (
+                <FaHeart style={{ fontSize: "20px" }} />
+              ) : (
+                <IoMdHeartEmpty style={{ fontSize: "20px" }} />
+              )}
             </Button>
           </div>
         </div>
 
-        {/* INFO AREA */}
-        <div className="product-info" title={name}>
-          <Link
-            to={`/products/${productId}`}
-            className="product-title-link"
-          >
-            <h4 className="product-title">{truncatedName}</h4>
+        {/* Info / Text block */}
+        <div className="info productCard-info" title={name}>
+          <Link to={`/products/${productId}`}>
+            <h4 className="productTitle clamp-2">{displayName}</h4>
           </Link>
 
-          <div className="product-meta d-flex align-items-center justify-content-between">
-            <span
-              className={`stock-badge ${
-                item?.countInStock >= 1 ? "in-stock" : "out-of-stock"
-              }`}
-            >
-              {item?.countInStock >= 1 ? "In Stock" : "Out of Stock"}
-            </span>
+          <div className="productMetaRow">
+            {inStock ? (
+              <span
+                className={`stock-pill ${
+                  isLowStock ? "stock-low" : "stock-in"
+                }`}
+              >
+                {isLowStock ? `Only ${countInStock} left` : "In Stock"}
+              </span>
+            ) : (
+              <span className="stock-pill stock-out">Out of Stock</span>
+            )}
 
+            {props?.item?.brand && (
+              <span className="brandName">{props.item.brand}</span>
+            )}
+          </div>
+
+          <div className="ratingRow">
             <Rating
-              className="product-rating"
               name="read-only"
-              value={item?.rating || 0}
+              value={ratingValue}
               readOnly
               size="small"
               precision={0.5}
             />
-          </div>
-
-          <div className="product-price-row d-flex align-items-baseline mt-2">
-            <span className="netPrice text-danger">
-              ₹{item?.price ?? 0}
-            </span>
-            {item?.oldPrice ? (
-              <span className="oldPrice ml-2">
-                ₹{item.oldPrice}
-              </span>
+            {ratingCount ? (
+              <span className="ratingCount">({ratingCount})</span>
             ) : null}
           </div>
+
+          <div className="priceRow">
+            <div className="priceMain">
+              {price !== null && (
+                <span className="netPrice">
+                  ₹ {formatCurrency(price)}
+                </span>
+              )}
+
+              {hasOldPrice && (
+                <span className="oldPrice ml-2">
+                  ₹ {formatCurrency(oldPrice)}
+                </span>
+              )}
+            </div>
+
+            {discount ? (
+              <span className="discountTag">-{discount}%</span>
+            ) : null}
+          </div>
+
+          {saving !== null && saving > 0 && (
+            <div className="saveText">
+              You save{" "}
+              <strong>₹ {formatCurrency(saving)}</strong>
+            </div>
+          )}
         </div>
       </div>
     </div>

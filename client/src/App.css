@@ -754,307 +754,217 @@ input[type=number]::-webkit-outer-spin-button {
   
   .otpPage .container{height:90vh; display: flex;}
 
-  /* ===========================
-   NEW PRODUCT CARD LAYOUT
-   (for updated ProductItem.jsx)
-   =========================== */
 
-/* Base card look */
+/* ============================
+   COLORFUL PRODUCT CARDS – THEME PRIMARY
+   ============================ */
+
+/* Outer colorful shell (gradient border look) */
 .productItem {
-  background: #ffffff;
-  border-radius: 10px !important;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  overflow: hidden;
+  background: linear-gradient(
+    135deg,
+    rgba(109, 74, 174, 0.10) 0%,
+    rgba(109, 74, 174, 0.04) 40%,
+    #ffffff 100%
+  );
+  border-radius: 14px !important;
+  padding: 1px; /* thin gradient border */
+  border: 1px solid rgba(109, 74, 174, 0.18) !important;
+  box-shadow: 0 6px 18px rgba(83, 52, 140, 0.15);
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    background 0.18s ease,
+    border-color 0.18s ease;
 }
 
-/* Inner wrapper to manage vertical/row layout */
+.productItem:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 35px rgba(83, 52, 140, 0.30);
+  background: linear-gradient(
+    135deg,
+    #6d4aae 0%,
+    #53348c 50%,
+    #3b2668 100%
+  );
+}
+
+/* Inner card stays clean & readable */
 .productItem .productCard-inner {
+  background: #ffffff;
+  border-radius: 12px;
+  height: 100%;
   display: flex;
   flex-direction: column;
-  height: 100%;
-  background: #ffffff;
-  border-radius: inherit;
   overflow: hidden;
-  position: relative;
 }
 
-/* Media / image area */
-.productItem .product-media {
-  position: relative;
-  background: #ffffff;
-  overflow: hidden;
-  min-height: 230px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+/* Colorful image background (themed) */
+.productItem .img_rapper {
+  height: 260px;
+  background: radial-gradient(
+    circle at top left,
+    rgba(109, 74, 174, 0.18) 0%,
+    rgba(109, 74, 174, 0.05) 50%,
+    #ffffff 100%
+  );
 }
 
-/* Row of discount badge + wishlist heart */
-.productItem .product-badges {
-  position: absolute;
+/* Discount / status badge – theme gradient chip */
+.productItem .product-discount-badge {
   top: 10px;
   left: 10px;
-  right: 10px;
-  z-index: 2;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  pointer-events: none;
-}
-
-/* Keep badge inline, not absolutely positioned */
-.productItem .product-badges .badge {
-  position: relative;
-  top: 0;
-  left: 0;
-  pointer-events: auto;
-  padding: 5px 10px;
+  border-radius: 999px;
   font-size: 11px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #6d4aae, #53348c) !important;
+  color: #ffffff !important;
 }
 
-.productItem .product-badges .discount-badge {
-  background: #2bbef9 !important;
-  color: #fff !important;
-}
-
-/* Wishlist icon button */
-.productItem .wishlist-btn {
-  pointer-events: auto;
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  background: #ffffff;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  outline: none;
-}
-
-.productItem .wishlist-btn svg {
-  color: #000;
-  opacity: 0.8;
-  transition: color 0.15s ease, transform 0.15s ease;
-}
-
-.productItem .wishlist-btn:hover {
-  background: #ed174a;
-  border-color: #ed174a;
-}
-
-.productItem .wishlist-btn:hover svg {
-  color: #ffffff;
-  opacity: 1;
-  transform: scale(1.05);
-}
-
-/* Active (in My List) state */
-.productItem .wishlist-btn.active {
-  background: #ed174a;
-  border-color: #ed174a;
-}
-
-.productItem .wishlist-btn.active svg {
-  color: #ffffff;
-  opacity: 1;
-}
-
-/* Image link area */
-.productItem .product-media-link {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-
-/* Skeleton wrapper */
-.productItem .product-skeleton {
-  width: 100%;
-  height: 100%;
-}
-
-/* Product images */
-.productItem .product-img {
-  width: 100%;
-  display: block;
-  object-fit: cover;
-  transition: transform 0.3s ease-in-out, opacity 0.3s ease-in-out;
-}
-
-/* Primary vs secondary for hover swap */
-.productItem .product-img.primary {
-  position: relative;
-  z-index: 1;
-}
-
-.productItem .product-img.secondary {
-  position: absolute;
-  top: 0;
-  left: 0;
-  z-index: 2;
-  opacity: 0;
-}
-
-/* Hover zoom + image swap */
-.productItem .product-media:hover .product-img.primary {
-  transform: scale(1.05);
-}
-
-.productItem .product-media:hover .product-img.secondary {
-  opacity: 1;
-  transform: scale(1.08);
-}
-
-/* Quick view overlay button */
-.productItem .product-overlay-actions {
-  position: absolute;
+/* Top-right action buttons – subtle colorful feel */
+.productItem .product-card-actions {
+  top: 10px;
   right: 10px;
-  bottom: 10px;
-  z-index: 3;
-  opacity: 0;
-  transform: translateY(5px);
-  transition: all 0.2s ease-in-out;
+  height: auto;
+  width: auto;
+  gap: 8px;
+  align-items: flex-end;
 }
 
-.productItem .quick-view-btn {
-  min-width: 36px !important;
-  width: 36px !important;
-  height: 36px !important;
-  border-radius: 50% !important;
+.productItem .product-card-actions button {
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.22) !important;
   background: #ffffff !important;
-  border: 1px solid rgba(0, 0, 0, 0.12) !important;
-  padding: 0 !important;
 }
 
-.productItem .quick-view-btn svg {
-  color: #000 !important;
-  font-size: 16px;
-  opacity: 0.85;
+.productItem .product-card-actions button:hover {
+  background: #6d4aae !important;
 }
 
-.productItem:hover .product-overlay-actions {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-/* Info area */
-.productItem .product-info {
+/* Info block with very light theme color wash */
+.productItem .productCard-info {
   padding: 12px 14px 14px;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  background: linear-gradient(
+    145deg,
+    rgba(109, 74, 174, 0.05),
+    rgba(83, 52, 140, 0.03)
+  );
 }
 
-.productItem .product-title-link {
-  text-decoration: none;
-}
-
-.productItem .product-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: #2e2e2e;
+/* Title */
+.productItem .productCard-info .productTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: #111827;
   margin-bottom: 4px;
-  line-height: 1.4;
-  transition: color 0.2s ease-in-out;
+  min-height: 36px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
-.productItem .product-title:hover {
-  color: #ed174a !important;
+.productItem .productCard-info .productTitle:hover {
+  color: #6d4aae !important;
 }
 
-/* Stock + rating row */
-.productItem .product-meta {
-  font-size: 12px;
-}
-
-.productItem .stock-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  border-radius: 999px;
+/* Stock pills – status colors kept */
+.productItem .stock-pill {
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-radius: 999px;
+  padding: 2px 8px;
 }
 
-.productItem .stock-badge.in-stock {
-  background: #e5f8ed;
-  color: #16b858;
+.productItem .stock-in {
+  background: rgba(34, 197, 94, 0.12);
+  color: #15803d;
 }
 
-.productItem .stock-badge.out-of-stock {
-  background: #ffe8ea;
-  color: #ed174a;
+.productItem .stock-low {
+  background: rgba(250, 204, 21, 0.16);
+  color: #92400e;
 }
 
-.productItem .product-rating {
-  margin-left: 8px;
+.productItem .stock-out {
+  background: rgba(248, 113, 113, 0.18);
+  color: #b91c1c;
+}
+
+/* Brand text */
+.productItem .brandName {
+  font-size: 11px;
+  color: #6b7280;
+  text-transform: capitalize;
+}
+
+/* Rating row */
+.productItem .ratingRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 4px 0 4px;
+}
+
+.productItem .ratingRow .MuiRating-root {
+  font-size: 16px;
+}
+
+.productItem .ratingCount {
+  font-size: 12px;
+  color: #6b7280;
 }
 
 /* Price row */
-.productItem .product-price-row .netPrice {
-  font-size: 16px !important;
-  font-weight: 700;
-}
-
-/* Mirror existing .info rules so both work */
-.productItem .product-price-row .oldPrice {
-  font-size: 14px !important;
-  font-weight: 600;
-  color: rgba(0, 0, 0, 0.4);
-  text-decoration: line-through;
-}
-
-/* Hover effect on entire card */
-.productItem:hover {
-  box-shadow: 0 3px 6px rgba(123, 108, 108, 0.16),
-    0 3px 6px rgba(0, 0, 0, 0.23);
-  border-color: transparent !important;
-}
-
-/* ===========================
-   LIST VIEW OVERRIDES (one)
-   =========================== */
-
-.productListing .productItem.one {
-  display: flex;
-}
-
-.productListing .productItem.one .productCard-inner {
-  flex-direction: row;
-}
-
-.productListing .productItem.one .product-media {
-  flex: 0 0 25%;
-  max-width: 25%;
-  min-height: 200px;
-  border-bottom: none;
-  border-right: 1px solid rgba(0, 0, 0, 0.06);
-}
-
-.productListing .productItem.one .product-info {
-  flex: 1;
-  padding: 14px 18px;
-}
-
-.productListing .productItem.one .product-media-link {
-  height: 100%;
+.productItem .priceRow {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
 }
 
-/* Make quick-view sit nicely in list view */
-.productListing .productItem.one .product-overlay-actions {
-  right: 12px;
-  bottom: 12px;
+.productItem .priceMain {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
 }
 
-/* Preserve your old .info price styles for legacy components */
-.product-info .oldPrice {
+/* Net price (main) – THEME PRIMARY */
+.productItem .priceMain .netPrice {
   font-size: 16px !important;
-  font-weight: bold;
-  color: rgba(0, 0, 0, 0.4);
+  font-weight: 800;
+  color: #6d4aae;
+}
+
+/* Old price */
+.productItem .priceMain .oldPrice {
+  font-size: 13px !important;
+  color: #9ca3af;
   text-decoration: line-through;
 }
 
-.product-info .netPrice {
-  font-size: 16px !important;
-  font-weight: bold;
+/* Discount chip next to price (keep accent red) */
+.productItem .discountTag {
+  font-size: 11px;
+  font-weight: 700;
+  color: #b91c1c;
+  background: rgba(248, 113, 113, 0.16);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+/* "You save" text – green */
+.productItem .saveText {
+  margin-top: 2px;
+  font-size: 11px;
+  color: #16a34a;
+}
+
+/* Slightly taller skeleton for images */
+.productItem .product-skeleton.MuiSkeleton-root {
+  height: 260px !important;
 }
