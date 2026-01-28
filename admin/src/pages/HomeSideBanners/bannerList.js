@@ -125,11 +125,11 @@ const HomeSideBannersList = () => {
 
                     <td>
                       <div className="actions d-flex align-items-center">
-                        <Link to={`/homeSideBanners/edit/${item._id}`}>
+                        {/* <Link to={`/homeSideBanners/edit/${item._id}`}>
                           <Button className="success" color="success">
                             <FaPencilAlt />
                           </Button>
-                        </Link>
+                        </Link> */}
 
                         <Button
                           className="error"

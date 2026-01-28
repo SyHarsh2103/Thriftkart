@@ -140,11 +140,11 @@ const HomeSlidesList = () => {
                     </td>
                     <td>
                       <div className="actions d-flex align-items-center">
-                        <Link to={`/homeBannerSlide/edit/${item._id}`}>
+                        {/* <Link to={`/homeBannerSlide/edit/${item._id}`}>
                           <Button className="success" color="success">
                             <FaPencilAlt />
                           </Button>
-                        </Link>
+                        </Link> */}
                         <Button
                           className="error"
                           color="error"

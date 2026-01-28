@@ -1,4 +1,9 @@
-import React, { useContext, useState, useEffect } from "react";
+import React, {
+  useContext,
+  useState,
+  useEffect,
+  useMemo,
+} from "react";
 import Breadcrumbs from "@mui/material/Breadcrumbs";
 import HomeIcon from "@mui/icons-material/Home";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -9,7 +14,12 @@ import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
 import { IoCloseSharp } from "react-icons/io5";
 import { useNavigate } from "react-router-dom";
-import { deleteImages, postData, uploadImage } from "../../utils/api";
+import {
+  deleteImages,
+  postData,
+  uploadImage,
+  fetchDataFromApi,
+} from "../../utils/api";
 import { MyContext } from "../../App";
 import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
@@ -39,9 +49,12 @@ const AddHomeBottomBanner = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [files, setFiles] = useState([]);
+
+  const [catData, setCatData] = useState([]);
+  const [subCatData, setSubCatData] = useState([]);
+
   const [categoryVal, setCategoryVal] = useState("");
   const [subCatVal, setSubCatVal] = useState("");
-  const [subCatData, setSubCatData] = useState([]);
 
   const [formFields, setFormFields] = useState({
     images: [],
@@ -54,18 +67,73 @@ const AddHomeBottomBanner = () => {
   const history = useNavigate();
   const context = useContext(MyContext);
 
-  // Collect subcategories
+  /* ------------------------------
+     CATEGORIES – normalize
+     ------------------------------ */
   useEffect(() => {
-    const subCatArr = [];
-    context.catData?.categoryList?.forEach((cat) => {
-      if (cat?.children?.length > 0) {
-        cat.children.forEach((sub) => subCatArr.push(sub));
-      }
-    });
-    setSubCatData(subCatArr);
+    const rawCat = context.catData;
+    let catList = [];
+
+    if (Array.isArray(rawCat?.categoryList)) {
+      // case: { categoryList: [...] }
+      catList = rawCat.categoryList;
+    } else if (Array.isArray(rawCat)) {
+      // case: [...] directly
+      catList = rawCat;
+    }
+
+    setCatData(catList || []);
   }, [context.catData]);
 
-  // Upload images
+  /* ------------------------------
+     SUB CATEGORIES – via API
+     ------------------------------ */
+  useEffect(() => {
+    fetchDataFromApi("/api/subCat")
+      .then((res) => {
+        const list = Array.isArray(res?.subCategoryList)
+          ? res.subCategoryList
+          : Array.isArray(res)
+          ? res
+          : [];
+        setSubCatData(list);
+      })
+      .catch((err) => {
+        console.error("subCat fetch error:", err);
+        setSubCatData([]);
+      });
+  }, []);
+
+  // Helper: get parent category id from a subcategory in multiple possible shapes
+  const getSubCatParentId = (s) => {
+    if (!s) return null;
+
+    if (s.catId && typeof s.catId === "object" && s.catId._id)
+      return String(s.catId._id);
+    if (s.catId) return String(s.catId);
+
+    if (s.categoryId && typeof s.categoryId === "object" && s.categoryId._id)
+      return String(s.categoryId._id);
+    if (s.categoryId) return String(s.categoryId);
+
+    if (s.category && typeof s.category === "object" && s.category._id)
+      return String(s.category._id);
+    if (s.category) return String(s.category);
+
+    return null;
+  };
+
+  // Only show subcategories belonging to selected category
+  const filteredSubCats = useMemo(() => {
+    if (!categoryVal) return [];
+    return subCatData.filter(
+      (s) => getSubCatParentId(s) === String(categoryVal)
+    );
+  }, [categoryVal, subCatData]);
+
+  /* ------------------------------
+     Upload images
+     ------------------------------ */
   const onChangeFile = async (e) => {
     const selected = e.target.files;
     if (!selected || selected.length === 0) return;
@@ -73,11 +141,19 @@ const AddHomeBottomBanner = () => {
     const fd = new FormData();
     for (let f of selected) {
       if (!["image/jpeg", "image/png", "image/webp", "image/jpg"].includes(f.type)) {
-        context.setAlertBox({ open: true, error: true, msg: "Only JPG/PNG/WEBP allowed." });
+        context.setAlertBox({
+          open: true,
+          error: true,
+          msg: "Only JPG/PNG/WEBP allowed.",
+        });
         return;
       }
       if (f.size > 5 * 1024 * 1024) {
-        context.setAlertBox({ open: true, error: true, msg: "Max size 5 MB" });
+        context.setAlertBox({
+          open: true,
+          error: true,
+          msg: "Max size 5 MB",
+        });
         return;
       }
       fd.append("images", f);
@@ -88,8 +164,15 @@ const AddHomeBottomBanner = () => {
       const res = await uploadImage("/api/homeBottomBanners/upload", fd);
       if (Array.isArray(res)) {
         setFiles((prev) => [...prev, ...res]);
-        setFormFields((prev) => ({ ...prev, images: [...prev.images, ...res] }));
-        context.setAlertBox({ open: true, error: false, msg: "Images Uploaded!" });
+        setFormFields((prev) => ({
+          ...prev,
+          images: [...prev.images, ...res],
+        }));
+        context.setAlertBox({
+          open: true,
+          error: false,
+          msg: "Images Uploaded!",
+        });
       }
     } finally {
       setUploading(false);
@@ -97,7 +180,9 @@ const AddHomeBottomBanner = () => {
     }
   };
 
-  // Remove image
+  /* ------------------------------
+     Remove image
+     ------------------------------ */
   const removeFile = async (index, filename) => {
     await deleteImages(`/api/homeBottomBanners/deleteImage?img=${filename}`);
     setFiles((prev) => prev.filter((_, i) => i !== index));
@@ -107,28 +192,49 @@ const AddHomeBottomBanner = () => {
     }));
   };
 
-  // Category/Subcategory handlers
+  /* ------------------------------
+     Category/Subcategory handlers
+     ------------------------------ */
   const handleChangeCategory = (e) => {
-    setCategoryVal(e.target.value);
-    const cat = context.catData.categoryList.find((c) => c._id === e.target.value);
-    if (cat) {
-      setFormFields((prev) => ({ ...prev, catId: cat._id, catName: cat.name }));
-    }
+    const val = e.target.value;
+    setCategoryVal(val);
+    setSubCatVal("");
+
+    const cat = catData.find((c) => String(c._id) === String(val));
+
+    setFormFields((prev) => ({
+      ...prev,
+      catId: val || null,
+      catName: cat?.name || null,
+      subCatId: null,
+      subCatName: null,
+    }));
   };
 
   const handleChangeSubCategory = (e) => {
-    setSubCatVal(e.target.value);
-    const sub = subCatData.find((s) => s._id === e.target.value);
-    if (sub) {
-      setFormFields((prev) => ({ ...prev, subCatId: sub._id, subCatName: sub.name }));
-    }
+    const val = e.target.value;
+    setSubCatVal(val);
+
+    const sub = filteredSubCats.find((s) => String(s._id) === String(val));
+
+    setFormFields((prev) => ({
+      ...prev,
+      subCatId: val || null,
+      subCatName: sub?.name || null,
+    }));
   };
 
-  // Submit
+  /* ------------------------------
+     Submit
+     ------------------------------ */
   const addBanner = async (e) => {
     e.preventDefault();
     if (formFields.images.length === 0) {
-      context.setAlertBox({ open: true, error: true, msg: "Upload at least one image" });
+      context.setAlertBox({
+        open: true,
+        error: true,
+        msg: "Upload at least one image",
+      });
       return;
     }
     setIsLoading(true);
@@ -142,9 +248,20 @@ const AddHomeBottomBanner = () => {
       <div className="card shadow border-0 w-100 flex-row p-4 mt-2">
         <h5 className="mb-0">Add Home Bottom Banner</h5>
         <Breadcrumbs aria-label="breadcrumb" className="ml-auto breadcrumbs_">
-          <StyledBreadcrumb component="a" label="Dashboard" icon={<HomeIcon fontSize="small" />} />
-          <StyledBreadcrumb component="a" label="Home Banners" deleteIcon={<ExpandMoreIcon />} />
-          <StyledBreadcrumb label="Add Banner" deleteIcon={<ExpandMoreIcon />} />
+          <StyledBreadcrumb
+            component="a"
+            label="Dashboard"
+            icon={<HomeIcon fontSize="small" />}
+          />
+          <StyledBreadcrumb
+            component="a"
+            label="Home Banners"
+            deleteIcon={<ExpandMoreIcon />}
+          />
+          <StyledBreadcrumb
+            label="Add Banner"
+            deleteIcon={<ExpandMoreIcon />}
+          />
         </Breadcrumbs>
       </div>
 
@@ -157,14 +274,18 @@ const AddHomeBottomBanner = () => {
                 <div className="col-md-6">
                   <h6>CATEGORY</h6>
                   <Select
-                    value={categoryVal || ""}
+                    value={categoryVal}
                     onChange={handleChangeCategory}
                     displayEmpty
                     className="w-100"
                   >
-                    <MenuItem value=""><em>None</em></MenuItem>
-                    {context.catData?.categoryList?.map((cat) => (
-                      <MenuItem key={cat._id} value={cat._id}>{cat.name}</MenuItem>
+                    <MenuItem value="">
+                      <em>Select Category</em>
+                    </MenuItem>
+                    {catData.map((cat) => (
+                      <MenuItem key={cat._id} value={cat._id}>
+                        {cat.name}
+                      </MenuItem>
                     ))}
                   </Select>
                 </div>
@@ -172,14 +293,25 @@ const AddHomeBottomBanner = () => {
                 <div className="col-md-6">
                   <h6>SUB CATEGORY</h6>
                   <Select
-                    value={subCatVal || ""}
+                    value={subCatVal}
                     onChange={handleChangeSubCategory}
                     displayEmpty
                     className="w-100"
+                    disabled={!categoryVal || filteredSubCats.length === 0}
                   >
-                    <MenuItem value=""><em>None</em></MenuItem>
-                    {subCatData.map((sub) => (
-                      <MenuItem key={sub._id} value={sub._id}>{sub.name}</MenuItem>
+                    <MenuItem value="">
+                      <em>
+                        {!categoryVal
+                          ? "Select Category first"
+                          : filteredSubCats.length
+                          ? "Select Sub Category"
+                          : "No Subcategories for this Category"}
+                      </em>
+                    </MenuItem>
+                    {filteredSubCats.map((sub) => (
+                      <MenuItem key={sub._id} value={sub._id}>
+                        {sub.subCat}
+                      </MenuItem>
                     ))}
                   </Select>
                 </div>
@@ -196,8 +328,19 @@ const AddHomeBottomBanner = () => {
                   </div>
                 ) : (
                   <label htmlFor="file-upload">
-                    <input id="file-upload" type="file" multiple onChange={onChangeFile} style={{ display: "none" }} />
-                    <Button variant="contained" component="span" startIcon={<FaRegImages />} className="btn-blue">
+                    <input
+                      id="file-upload"
+                      type="file"
+                      multiple
+                      onChange={onChangeFile}
+                      style={{ display: "none" }}
+                    />
+                    <Button
+                      variant="contained"
+                      component="span"
+                      startIcon={<FaRegImages />}
+                      className="btn-blue"
+                    >
                       Choose Files
                     </Button>
                   </label>
@@ -207,7 +350,10 @@ const AddHomeBottomBanner = () => {
                 {files.length > 0 && (
                   <ul className="list-unstyled mt-3">
                     {files.map((fn, i) => (
-                      <li key={i} className="d-flex justify-content-between align-items-center border p-2 mb-2 rounded">
+                      <li
+                        key={i}
+                        className="d-flex justify-content-between align-items-center border p-2 mb-2 rounded"
+                      >
                         <span>{fn}</span>
                         <Button
                           size="small"
@@ -225,9 +371,17 @@ const AddHomeBottomBanner = () => {
               </div>
 
               <br />
-              <Button type="submit" className="btn-blue btn-lg btn-big w-100">
+              <Button
+                type="submit"
+                className="btn-blue btn-lg btn-big w-100"
+                disabled={isLoading}
+              >
                 <FaCloudUploadAlt /> &nbsp;
-                {isLoading ? <CircularProgress color="inherit" className="loader" /> : "PUBLISH AND VIEW"}
+                {isLoading ? (
+                  <CircularProgress color="inherit" className="loader" />
+                ) : (
+                  "PUBLISH AND VIEW"
+                )}
               </Button>
             </div>
           </div>

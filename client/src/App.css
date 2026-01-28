@@ -201,30 +201,181 @@ nav .allCatTab .text{font-weight: 600; font-size: 12px;}
 nav .allCatTab .icon1 svg{font-size: 20px !important;}
 nav .allCatTab .icon2 svg{font-size: 15px !important;}
 
-nav .navPart2 ul{margin-bottom: 0px;}
-nav .navPart2 ul li{padding-bottom: 20px; margin-right: 0px !important;}
-nav .navPart2 ul li a{text-decoration: none;}
-nav .navPart2 ul li a button{ font-size: 14px !important; font-weight: 600; text-decoration: none; color: rgba(0,0,0,0.7); text-transform:uppercase !important; display: flex; align-items: center; padding: 6px 20px; transition: all 0.2s ease-in-out; border-radius: 25px;}
-nav .navPart2 ul li a button:hover{background: #f1f1f1; color: #000;}
+/* ============================
+   NAV CATEGORY LIST – DESKTOP
+   ============================ */
 
-nav .navPart2 ul li:hover a button{background: #f1f1f1; color: #000;}
-
-nav .navPart2 ul li a svg{font-size: 20px;}
-
-nav .navPart2 ul li a:hover{background: #f0faff; color: #7a55c1;}
-
-nav .navPart2 ul li{position: relative;}
-nav .navPart2 ul li .submenu{position: absolute; top: 150%; left: 0px; min-width: 200px;
-background: #fff; opacity: 0; visibility: hidden; transition: all 0.2s ease-in-out; z-index: 100; overflow: hidden; border-bottom-left-radius: 10px;  border-bottom-right-radius: 10px;
-box-shadow: 0 3px 6px rgba(0, 0, 0, 0.16), 0 3px 6px rgba(0, 0, 0, 0.23);}
-nav .navPart2 ul li .submenu a{display: block; width: 100%;}
-nav .navPart2 ul li .submenu a button{ text-align: left !important; width: 100%; justify-content: flex-start !important;
-border-radius: 0px !important; text-transform: capitalize !important; font-weight: 500 !important; color: #282828 !important; background: #fff;}
-
-nav .navPart2 ul li .submenu a button:hover{background: #f1f1f1 !important;}
-
-nav .navPart2 ul li:hover .submenu{opacity: 1; visibility: inherit; top: 100%;}
-
+   nav .nav-category-list {
+    margin-bottom: 0;
+    padding-left: 0;
+    list-style: none;
+  }
+  
+  /* Desktop: center align items in a row */
+  nav .nav-category-list--desktop {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  
+  nav .nav-category-list--desktop .list-inline-item {
+    padding-bottom: 20px;
+    margin-right: 0 !important;
+  }
+  
+  /* Reuse your existing styles for buttons, hover, submenu etc. */
+  nav .navPart2 ul li a {
+    text-decoration: none;
+  }
+  nav .navPart2 ul li a button {
+    font-size: 14px !important;
+    font-weight: 600;
+    text-decoration: none;
+    color: rgba(0, 0, 0, 0.7);
+    text-transform: uppercase !important;
+    display: flex;
+    align-items: center;
+    padding: 6px 20px;
+    transition: all 0.2s ease-in-out;
+    border-radius: 25px;
+  }
+  
+  /* ============================
+     MOBILE NAV DRAWER
+     ============================ */
+  
+  @media (max-width: 991.98px) {
+    /* Wrapper becomes full-screen overlay container */
+    .res-nav-wrapper {
+      position: fixed;
+      top: 0;
+      left: 0;
+      z-index: 9999;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+  
+    .res-nav-wrapper.open {
+      pointer-events: auto;
+    }
+  
+    /* Dark overlay behind drawer */
+    .res-nav-wrapper .res-nav-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.2s ease, visibility 0.2s ease;
+    }
+  
+    .res-nav-wrapper.open .res-nav-overlay {
+      opacity: 1;
+      visibility: visible;
+    }
+  
+    /* Drawer panel */
+    .res-nav-wrapper .res-nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 280px;
+      max-width: 80%;
+      height: 100%;
+      background: #ffffff;
+      box-shadow: 0 0 15px rgba(0, 0, 0, 0.15);
+      transform: translateX(-100%);
+      transition: transform 0.25s ease-out;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+  
+    .res-nav-wrapper.open .res-nav {
+      transform: translateX(0);
+    }
+  
+    /* Mobile list layout: vertical full width */
+    .nav-category-list--mobile {
+      display: block;
+      padding: 8px 0 16px;
+    }
+  
+    .nav-category-list--mobile .list-inline-item {
+      display: block;
+      width: 100%;
+      padding: 4px 8px;
+    }
+  
+    .nav-category-list--mobile .list-inline-item > .d-flex {
+      justify-content: space-between;
+      align-items: center;
+    }
+  
+    .nav-category-list--mobile a button {
+      width: 100%;
+      justify-content: flex-start;
+    }
+  
+    /* Arrow icon for subcategories */
+    .nav-category-list--mobile .arrow {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 14px;
+      color: #4b5563;
+      transition: transform 0.2s ease, background 0.2s ease;
+    }
+  
+    .nav-category-list--mobile .arrow.rotate {
+      transform: rotate(180deg);
+      background: rgba(0, 0, 0, 0.04);
+    }
+  
+    /* Override submenu styling for mobile:
+       stacked, no absolute positioning, visible only when .open */
+    nav .navPart2 ul li .submenu {
+      position: static;
+      top: auto;
+      left: auto;
+      min-width: 100%;
+      box-shadow: none;
+      border-radius: 0;
+      background: transparent;
+      opacity: 0;
+      visibility: hidden;
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.2s ease, opacity 0.2s ease, visibility 0.2s ease;
+    }
+  
+    nav .navPart2 ul li .submenu.open {
+      opacity: 1;
+      visibility: visible;
+      max-height: 300px; /* enough for few items */
+      margin-top: 4px;
+    }
+  
+    nav .navPart2 ul li .submenu a button {
+      text-align: left !important;
+      width: 100%;
+      justify-content: flex-start !important;
+      border-radius: 0 !important;
+      text-transform: capitalize !important;
+      font-weight: 500 !important;
+      color: #282828 !important;
+      background: #f9fafb;
+    }
+  
+    nav .navPart2 ul li .submenu a button:hover {
+      background: #f3f4f6 !important;
+    }
+  }
+  
 
 .homeBannerSection{position: relative;}
 .homeBannerSection .swiper{overflow: inherit !important;}
