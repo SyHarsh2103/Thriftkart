@@ -202,9 +202,57 @@ nav .allCatTab .icon1 svg{font-size: 20px !important;}
 nav .allCatTab .icon2 svg{font-size: 15px !important;}
 
 /* ============================
-   DESKTOP NAV – CENTER IN ONE ROW
+   BASE NAV ITEM STYLING
+   (THEME COLOR + UPPERCASE)
    ============================ */
-   @media (min-width: 992px) {
+
+   nav .navPart2 ul {
+    margin-bottom: 0;
+  }
+  
+  nav .navPart2 ul li {
+    padding-bottom: 0;
+    margin-right: 0 !important;
+    position: relative;
+  }
+  
+  nav .navPart2 ul li a {
+    text-decoration: none;
+  }
+  
+  /* Main nav button */
+  nav .navPart2 ul li a button {
+    font-size: 14px !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.08em;
+    text-transform: uppercase !important;
+    color: #6d4aae !important;             /* theme primary */
+    background: transparent;
+    display: flex;
+    align-items: center;
+    padding: 6px 20px;
+    border-radius: 25px;
+    transition: all 0.2s ease-in-out;
+  }
+  
+  /* Hover & focus */
+  nav .navPart2 ul li a button:hover,
+  nav .navPart2 ul li:hover > a button {
+    background: #f5f0ff;                   /* light theme wash */
+    color: #53348c !important;             /* darker theme */
+  }
+  
+  /* Active NavLink */
+  nav .navPart2 ul li a.active button {
+    background: #6d4aae !important;
+    color: #ffffff !important;
+    box-shadow: 0 4px 12px rgba(109, 74, 174, 0.35);
+  }
+  
+  /* ============================
+     DESKTOP NAV – CENTER IN ONE ROW
+     ============================ */
+  @media (min-width: 992px) {
     /* Make the nav area full width and center its content */
     nav .navPart2 {
       max-width: 100%;
@@ -224,7 +272,7 @@ nav .allCatTab .icon2 svg{font-size: 15px !important;}
       display: flex;
       justify-content: center;
       align-items: center;
-      flex-wrap: nowrap;         /* 👈 no wrapping – one row */
+      flex-wrap: nowrap;         /* no wrapping – one row */
       margin-left: auto;
       margin-right: auto;
       padding-left: 0;
@@ -233,11 +281,10 @@ nav .allCatTab .icon2 svg{font-size: 15px !important;}
     nav .navPart2 ul li {
       display: inline-flex;
       align-items: center;
-      padding-bottom: 0;         /* optional: remove extra bottom gap */
-      margin-right: 0 !important;
+      padding-bottom: 0;
+      margin: 0 4px !important;  /* small horizontal gap */
     }
   }
-  
   
   /* ============================
      MOBILE NAV DRAWER
@@ -326,13 +373,13 @@ nav .allCatTab .icon2 svg{font-size: 15px !important;}
       border-radius: 50%;
       cursor: pointer;
       font-size: 14px;
-      color: #4b5563;
+      color: #6d4aae;                      /* theme tint */
       transition: transform 0.2s ease, background 0.2s ease;
     }
   
     .nav-category-list--mobile .arrow.rotate {
       transform: rotate(180deg);
-      background: rgba(0, 0, 0, 0.04);
+      background: rgba(109, 74, 174, 0.08); /* soft theme bg */
     }
   
     /* Override submenu styling for mobile:
@@ -372,8 +419,10 @@ nav .allCatTab .icon2 svg{font-size: 15px !important;}
   
     nav .navPart2 ul li .submenu a button:hover {
       background: #f3f4f6 !important;
+      color: #53348c !important;           /* theme hover */
     }
   }
+  
   
 
 .homeBannerSection{position: relative;}
