@@ -202,43 +202,42 @@ nav .allCatTab .icon1 svg{font-size: 20px !important;}
 nav .allCatTab .icon2 svg{font-size: 15px !important;}
 
 /* ============================
-   NAV CATEGORY LIST – DESKTOP
+   DESKTOP NAV – CENTER IN ONE ROW
    ============================ */
-
-   nav .nav-category-list {
-    margin-bottom: 0;
-    padding-left: 0;
-    list-style: none;
+   @media (min-width: 992px) {
+    /* Make the nav area full width and center its content */
+    nav .navPart2 {
+      max-width: 100%;
+      flex: 0 0 100%;
+      display: flex;
+      justify-content: center;   /* center inside container */
+    }
+  
+    nav .navPart2 .res-nav {
+      width: 100%;
+      display: flex;
+      justify-content: center;   /* center the <ul> */
+    }
+  
+    /* Force the nav list into a single centered row */
+    nav .navPart2 ul {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-wrap: nowrap;         /* 👈 no wrapping – one row */
+      margin-left: auto;
+      margin-right: auto;
+      padding-left: 0;
+    }
+  
+    nav .navPart2 ul li {
+      display: inline-flex;
+      align-items: center;
+      padding-bottom: 0;         /* optional: remove extra bottom gap */
+      margin-right: 0 !important;
+    }
   }
   
-  /* Desktop: center align items in a row */
-  nav .nav-category-list--desktop {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-  }
-  
-  nav .nav-category-list--desktop .list-inline-item {
-    padding-bottom: 20px;
-    margin-right: 0 !important;
-  }
-  
-  /* Reuse your existing styles for buttons, hover, submenu etc. */
-  nav .navPart2 ul li a {
-    text-decoration: none;
-  }
-  nav .navPart2 ul li a button {
-    font-size: 14px !important;
-    font-weight: 600;
-    text-decoration: none;
-    color: rgba(0, 0, 0, 0.7);
-    text-transform: uppercase !important;
-    display: flex;
-    align-items: center;
-    padding: 6px 20px;
-    transition: all 0.2s ease-in-out;
-    border-radius: 25px;
-  }
   
   /* ============================
      MOBILE NAV DRAWER
