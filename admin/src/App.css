@@ -1039,3 +1039,154 @@ body.dark .select__menu *{color: #000 !important;}
     font-size: 18px;
   }
 }
+/* ===== Admin Product Card Grid (Product List) ===== */
+
+.adminProductCard {
+  border-radius: 10px;
+  overflow: hidden;
+  padding: 0;
+  transition: all 0.2s ease-in-out;
+  background: #ffffff;
+}
+
+body.dark .adminProductCard {
+  background: #1b2b4d;
+}
+
+.adminProductCard:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 25px rgba(15, 23, 42, 0.16);
+}
+
+/* Image wrapper */
+.adminProductCard-imgWrapper {
+  position: relative;
+  width: 100%;
+  height: 190px;
+  overflow: hidden;
+}
+
+.adminProductCard-imgWrapper img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Discount / stock badge */
+.adminProductCard-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 4px 8px;
+  font-size: 11px;
+  border-radius: 999px;
+}
+
+/* Body */
+.adminProductCard-body {
+  padding: 12px 14px 14px;
+}
+
+/* Category / subcat / brand row */
+.adminProductCard-metaTop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.adminProductCard-brand {
+  font-size: 12px;
+  font-weight: 600;
+  color: #5e5d72;
+}
+
+body.dark .adminProductCard-brand {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* Title */
+.adminProductCard-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 4px 0 6px;
+  line-height: 1.4;
+  max-height: 3.0em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* Rating row */
+.adminProductCard-rating {
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+}
+
+.adminProductCard-ratingCount {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+/* Price row */
+.adminProductCard-priceRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+
+.adminProductCard-priceRow .netPrice {
+  font-weight: 700;
+  font-size: 15px;
+  color: #e11d48;
+}
+
+body.dark .adminProductCard-priceRow .netPrice {
+  color: #f97373;
+}
+
+.adminProductCard-priceRow .oldPrice {
+  font-size: 12px;
+  text-decoration: line-through;
+  color: #6b7280;
+}
+
+.discountTag {
+  font-size: 11px;
+  font-weight: 600;
+  color: #16a34a;
+}
+
+/* Stock pill (reuse existing colors) */
+.stock-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.stock-in {
+  background: rgba(34, 197, 94, 0.1);
+  color: #15803d;
+}
+
+.stock-low {
+  background: rgba(234, 179, 8, 0.1);
+  color: #a16207;
+}
+
+.stock-out {
+  background: rgba(239, 68, 68, 0.1);
+  color: #b91c1c;
+}
+
+.adminProductCard-stock {
+  min-height: 22px;
+}
+

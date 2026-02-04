@@ -44,20 +44,28 @@ const StyledBreadcrumb = styled(Chip)(({ theme }) => {
   };
 });
 
+const perPage = 12;
+
 const Products = () => {
   const context = useContext(MyContext);
 
   const [categoryVal, setCategoryVal] = useState("all");
+  const [searchTerm, setSearchTerm] = useState("");
+
   const [productList, setProductList] = useState([]);
-  const [totalProducts, setTotalProducts] = useState(0);
+
+  // Dashboard counts
+  const [totalProductsAll, setTotalProductsAll] = useState(0);
   const [totalCategory, setTotalCategory] = useState(0);
   const [totalSubCategory, setTotalSubCategory] = useState(0);
 
-  // Card pagination (client-side)
+  // Pagination
   const [page, setPage] = useState(1);
-  const perPage = 12; // cards per page
+  const [totalProductsFiltered, setTotalProductsFiltered] = useState(0);
 
-  // ---- Derive category list from context (supports both shapes) ----
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Normalize categories from context
   const categories = useMemo(() => {
     if (Array.isArray(context?.catData?.categoryList)) {
       return context.catData.categoryList;
@@ -68,52 +76,139 @@ const Products = () => {
     return [];
   }, [context?.catData]);
 
+  const parseNumber = (val) => {
+    const num = Number(val);
+    return Number.isFinite(num) ? num : null;
+  };
+
+  const formatCurrency = (val) => {
+    const num = parseNumber(val);
+    if (num === null) return "-";
+    return num.toLocaleString("en-IN");
+  };
+
+  const extractTotalFromResponse = (res, fallbackLen) => {
+    if (!res || typeof res !== "object") return fallbackLen;
+
+    if (typeof res.total === "number") return res.total;
+    if (typeof res.productsCount === "number") return res.productsCount;
+    if (typeof res.count === "number") return res.count;
+
+    return fallbackLen;
+  };
+
+  /**
+   * Unified loader:
+   * - Uses current categoryVal + searchTerm
+   * - Decides which API endpoint to hit:
+   *    - /api/search  (when searchTerm present)
+   *    - /api/products/catId (when category != all)
+   *    - /api/products (default)
+   */
+  const loadPage = async (pageNumber = 1, overrides = {}) => {
+    const cat = overrides.categoryVal !== undefined ? overrides.categoryVal : categoryVal;
+    const search = overrides.searchTerm !== undefined ? overrides.searchTerm : searchTerm;
+
+    setIsLoading(true);
+
+    try {
+      let url = "";
+      const params = new URLSearchParams();
+      params.set("page", String(pageNumber));
+      params.set("perPage", String(perPage));
+
+      // When we have a search term – prefer /api/search
+      if (search && search.trim() !== "") {
+        params.set("q", search.trim());
+        if (cat && cat !== "all") {
+          params.set("catId", cat);
+        }
+        url = `/api/search?${params.toString()}`;
+      } else if (cat && cat !== "all") {
+        // Category filter only
+        params.set("catId", cat);
+        url = `/api/products/catId?${params.toString()}`;
+      } else {
+        // All products
+        url = `/api/products?${params.toString()}`;
+      }
+
+      const res = await fetchDataFromApi(url);
+      const list = Array.isArray(res?.products) ? res.products : [];
+      const total = extractTotalFromResponse(res, list.length);
+
+      setProductList(list);
+      setTotalProductsFiltered(total);
+      setPage(pageNumber);
+    } catch (err) {
+      console.error("Load products error:", err);
+      context.setAlertBox({
+        open: true,
+        error: true,
+        msg: "Failed to load products",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Initial load: dashboard counts + first page
   useEffect(() => {
     window.scrollTo(0, 0);
     context.setProgress(40);
 
-    // Load all products (filtered client-side by pagination)
-    fetchDataFromApi(`/api/products?page=1&perPage=1000`).then((res) => {
-      const list = res?.products || [];
-      setProductList(list);
-      setTotalProducts(res?.total || list.length || 0);
+    // Global total
+    fetchDataFromApi("/api/products/get/count")
+      .then((res) => {
+        const total = extractTotalFromResponse(res, 0);
+        setTotalProductsAll(total);
+      })
+      .catch((err) => console.error("Total products error:", err));
+
+    fetchDataFromApi("/api/category/get/count")
+      .then((res) => {
+        const c = typeof res?.categoryCount === "number" ? res.categoryCount : 0;
+        setTotalCategory(c);
+      })
+      .catch((err) => console.error("Total category error:", err));
+
+    fetchDataFromApi("/api/category/subCat/get/count")
+      .then((res) => {
+        const c = typeof res?.categoryCount === "number" ? res.categoryCount : 0;
+        setTotalSubCategory(c);
+      })
+      .catch((err) => console.error("Total subcategory error:", err));
+
+    // First page of "all products"
+    loadPage(1, { categoryVal: "all", searchTerm: "" }).finally(() => {
       context.setProgress(100);
     });
 
-    fetchDataFromApi("/api/products/get/count").then((res) => {
-      setTotalProducts(res.productsCount || 0);
-    });
-    fetchDataFromApi("/api/category/get/count").then((res) => {
-      setTotalCategory(res.categoryCount || 0);
-    });
-    fetchDataFromApi("/api/category/subCat/get/count").then((res) => {
-      setTotalSubCategory(res.categoryCount || 0);
-    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // --- Delete a product ---
   const deleteProduct = async (id) => {
-    context.setProgress(40);
-    await deleteData(`/api/products/${id}`);
-    context.setProgress(100);
-    context.setAlertBox({
-      open: true,
-      error: false,
-      msg: "Product Deleted!",
-    });
-
-    // Refresh list after delete (keep current filters)
-    if (categoryVal === "all") {
-      fetchDataFromApi(`/api/products?page=1&perPage=1000`).then((res) => {
-        const list = res?.products || [];
-        setProductList(list);
+    try {
+      context.setProgress(40);
+      await deleteData(`/api/products/${id}`);
+      context.setProgress(100);
+      context.setAlertBox({
+        open: true,
+        error: false,
+        msg: "Product Deleted!",
       });
-    } else {
-      fetchDataFromApi(
-        `/api/products/catId?catId=${categoryVal}&page=1&perPage=1000`
-      ).then((res) => {
-        const list = res?.products || [];
-        setProductList(list);
+
+      // Reload current page with current category + search
+      await loadPage(page);
+
+      context.fetchCategory?.();
+    } catch (err) {
+      console.error("Delete product error:", err);
+      context.setAlertBox({
+        open: true,
+        error: true,
+        msg: "Failed to delete product",
       });
     }
   };
@@ -122,63 +217,24 @@ const Products = () => {
   const handleChangeCategory = (event) => {
     const catId = event.target.value;
     setCategoryVal(catId);
-    setPage(1); // reset to first page on filter change
 
-    if (catId === "all") {
-      fetchDataFromApi(`/api/products?page=1&perPage=1000`).then((res) => {
-        const list = res?.products || [];
-        setProductList(list);
-      });
-    } else {
-      fetchDataFromApi(
-        `/api/products/catId?catId=${catId}&page=1&perPage=1000`
-      ).then((res) => {
-        const list = res?.products || [];
-        setProductList(list);
-      });
-    }
+    // When category changes, keep current searchTerm, but reset to page 1
+    loadPage(1, { categoryVal: catId });
   };
 
   // --- Search ---
   const searchProducts = (keyword) => {
-    setPage(1); // reset to page 1 for new search
+    const trimmed = (keyword || "").trim();
+    setSearchTerm(trimmed);
 
-    if (keyword !== "") {
-      fetchDataFromApi(
-        `/api/search?q=${keyword}&page=1&perPage=10000`
-      ).then((res) => {
-        const list = res?.products || [];
-        setProductList(list);
-      });
-    } else {
-      // back to normal (respect current category filter)
-      if (categoryVal === "all") {
-        fetchDataFromApi(`/api/products?page=1&perPage=1000`).then((res) => {
-          const list = res?.products || [];
-          setProductList(list);
-        });
-      } else {
-        fetchDataFromApi(
-          `/api/products/catId?catId=${categoryVal}&page=1&perPage=1000`
-        ).then((res) => {
-          const list = res?.products || [];
-          setProductList(list);
-        });
-      }
-    }
+    // Always go to page 1 whenever search text changes
+    loadPage(1, { searchTerm: trimmed });
   };
 
-  // --- Client-side pagination slice ---
-  const totalPages = Math.max(
-    1,
-    Math.ceil((productList?.length || 0) / perPage)
-  );
-
-  const paginatedProducts = useMemo(() => {
-    const start = (page - 1) * perPage;
-    const end = start + perPage;
-    return (productList || []).slice(start, end);
-  }, [productList, page]);
+  const totalPages =
+    totalProductsFiltered > 0
+      ? Math.ceil(totalProductsFiltered / perPage)
+      : 1;
 
   return (
     <div className="right-content w-100">
@@ -187,10 +243,7 @@ const Products = () => {
         <h5 className="mb-0">Product List</h5>
 
         <div className="ml-auto d-flex align-items-center">
-          <Breadcrumbs
-            aria-label="breadcrumb"
-            className="ml-auto breadcrumbs_"
-          >
+          <Breadcrumbs aria-label="breadcrumb" className="ml-auto breadcrumbs_">
             <StyledBreadcrumb
               component="a"
               href="#"
@@ -217,7 +270,7 @@ const Products = () => {
               color={["#1da256", "#48d483"]}
               icon={<MdShoppingBag />}
               title="Total Products"
-              count={totalProducts}
+              count={totalProductsAll}
               grow
             />
             <DashboardBox
@@ -236,10 +289,20 @@ const Products = () => {
         </div>
       </div>
 
-      {/* Filters */}
+      {/* Filters + Cards */}
       <div className="card shadow border-0 p-3 mt-4">
-        <h3 className="hd">All Products</h3>
+        <h3 className="hd">
+          All Products{" "}
+          {totalProductsFiltered > 0 && (
+            <span style={{ fontSize: 13, fontWeight: 400 }}>
+              &nbsp;• Showing {totalProductsFiltered} item
+              {totalProductsFiltered > 1 ? "s" : ""}
+              {searchTerm ? " (search)" : ""}
+            </span>
+          )}
+        </h3>
 
+        {/* Filters */}
         <div className="row cardFilters mt-2 mb-3">
           <div className="col-md-3">
             <h4>CATEGORY BY</h4>
@@ -267,113 +330,191 @@ const Products = () => {
 
         {/* Product Cards */}
         <div className="row">
-          {paginatedProducts.length === 0 && (
+          {isLoading && (
+            <div className="col-12 text-center py-4">
+              <span style={{ fontSize: 14 }}>Loading products...</span>
+            </div>
+          )}
+
+          {!isLoading && productList.length === 0 && (
             <div className="col-12 text-center py-5">
               <h6 className="text-muted mb-0">No products found.</h6>
             </div>
           )}
 
-          {paginatedProducts.map((item) => (
-            <div
-              key={item._id}
-              className="col-xl-3 col-lg-4 col-md-6 col-sm-6 mb-4"
-            >
-              <div className="card h-100 shadow-sm product-card-admin">
-                <div className="position-relative">
-                  <div className="product-card-image-wrapper">
-                    <LazyLoadImage
-                      alt={item?.name || "product"}
-                      effect="blur"
-                      className="w-100"
-                      src={item.images?.[0]}
-                    />
+          {!isLoading &&
+            productList.map((item) => {
+              const name = item?.name || "";
+              const displayName =
+                name.length > 60
+                  ? `${name.substring(0, 60).trim()}…`
+                  : name;
+
+              const price = parseNumber(item?.price);
+              const oldPrice = parseNumber(item?.oldPrice);
+              const hasOldPrice =
+                oldPrice !== null && price !== null && oldPrice > price;
+
+              const explicitDiscount = parseNumber(item?.discount);
+              const computedDiscount =
+                hasOldPrice && oldPrice
+                  ? Math.round(((oldPrice - price) / oldPrice) * 100)
+                  : null;
+              const discount = explicitDiscount || computedDiscount;
+
+              const ratingValue = parseNumber(item?.rating) || 0;
+
+              const countInStock = item?.countInStock ?? 0;
+              const inStock = countInStock > 0;
+              const isLowStock = inStock && countInStock <= 5;
+
+              return (
+                <div
+                  key={item._id}
+                  className="col-xl-3 col-lg-4 col-md-6 col-sm-6 mb-4"
+                >
+                  <div className="card adminProductCard shadow-sm border-0">
+                    {/* Image + badge */}
+                    <div className="adminProductCard-imgWrapper">
+                      <Link to={`/product/details/${item._id}`}>
+                        <LazyLoadImage
+                          alt={name}
+                          effect="blur"
+                          className="w-100"
+                          src={item?.images?.[0]}
+                        />
+                      </Link>
+
+                      {discount ? (
+                        <span className="badge badge-primary adminProductCard-badge">
+                          {discount}% OFF
+                        </span>
+                      ) : inStock ? (
+                        <span className="badge bg-success adminProductCard-badge">
+                          In Stock
+                        </span>
+                      ) : (
+                        <span className="badge bg-secondary adminProductCard-badge">
+                          Out of Stock
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Body */}
+                    <div className="adminProductCard-body">
+                      <div className="adminProductCard-metaTop mb-1">
+                        {item?.catName && (
+                          <span className="badge badge-light mr-1">
+                            {item.catName}
+                          </span>
+                        )}
+                        {item?.subCatName && (
+                          <span className="badge badge-secondary mr-1">
+                            {item.subCatName}
+                          </span>
+                        )}
+                        {item?.brand && (
+                          <span className="adminProductCard-brand">
+                            {item.brand}
+                          </span>
+                        )}
+                      </div>
+
+                      <Link to={`/product/details/${item._id}`}>
+                        <h4 className="adminProductCard-title">
+                          {displayName}
+                        </h4>
+                      </Link>
+
+                      <div className="adminProductCard-rating mb-2">
+                        <Rating
+                          name="read-only"
+                          value={ratingValue}
+                          readOnly
+                          size="small"
+                          precision={0.5}
+                        />
+                        {ratingValue ? (
+                          <span className="adminProductCard-ratingCount ml-1">
+                            {ratingValue.toFixed(1)}
+                          </span>
+                        ) : null}
+                      </div>
+
+                      <div className="adminProductCard-priceRow mb-1">
+                        <div className="priceMain">
+                          {price !== null && (
+                            <span className="netPrice">
+                              ₹ {formatCurrency(price)}
+                            </span>
+                          )}
+                          {hasOldPrice && (
+                            <span className="oldPrice ml-2">
+                              ₹ {formatCurrency(oldPrice)}
+                            </span>
+                          )}
+                        </div>
+                        {discount ? (
+                          <span className="discountTag">-{discount}%</span>
+                        ) : null}
+                      </div>
+
+                      <div className="adminProductCard-stock mb-2">
+                        {inStock ? (
+                          <span
+                            className={
+                              isLowStock
+                                ? "stock-pill stock-low"
+                                : "stock-pill stock-in"
+                            }
+                          >
+                            {isLowStock
+                              ? `Only ${countInStock} left`
+                              : "In Stock"}
+                          </span>
+                        ) : (
+                          <span className="stock-pill stock-out">
+                            Out of Stock
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="actions d-flex align-items-center mt-2">
+                        <Link to={`/product/details/${item._id}`}>
+                          <Button size="small" className="secondary">
+                            <FaEye />
+                          </Button>
+                        </Link>
+                        <Link to={`/product/edit/${item._id}`}>
+                          <Button size="small" className="success">
+                            <FaPencilAlt />
+                          </Button>
+                        </Link>
+                        <Button
+                          size="small"
+                          className="error"
+                          onClick={() => deleteProduct(item._id)}
+                        >
+                          <MdDelete />
+                        </Button>
+                      </div>
+                    </div>
                   </div>
-                  {item.discount ? (
-                    <span className="badge bg-danger position-absolute m-2">
-                      {item.discount}% OFF
-                    </span>
-                  ) : null}
                 </div>
-
-                <div className="card-body d-flex flex-column">
-                  <div className="mb-1">
-                    <span className="badge badge-light mr-2">
-                      {item?.catName || "No Category"}
-                    </span>
-                    {item?.subCatName && (
-                      <span className="badge badge-secondary">
-                        {item.subCatName}
-                      </span>
-                    )}
-                  </div>
-
-                  <Link to={`/product/details/${item._id}`}>
-                    <h6 className="mb-1 text-truncate">{item?.name}</h6>
-                  </Link>
-
-                  {item?.brand && (
-                    <p className="mb-1 text-muted small">
-                      Brand: <strong>{item.brand}</strong>
-                    </p>
-                  )}
-
-                  <div className="mb-2">
-                    <del className="text-muted small mr-2">
-                      Rs {item?.oldPrice}
-                    </del>
-                    <span className="text-danger font-weight-bold">
-                      Rs {item?.price}
-                    </span>
-                  </div>
-
-                  <div className="d-flex align-items-center mb-3">
-                    <Rating
-                      name="read-only"
-                      defaultValue={item?.rating}
-                      precision={0.5}
-                      size="small"
-                      readOnly
-                    />
-                    {item?.rating ? (
-                      <span className="ml-2 small text-muted">
-                        {item.rating.toFixed(1)}
-                      </span>
-                    ) : null}
-                  </div>
-
-                  <div className="mt-auto d-flex justify-content-between">
-                    <Link to={`/product/details/${item._id}`}>
-                      <Button size="small" className="secondary mr-1">
-                        <FaEye />
-                      </Button>
-                    </Link>
-                    <Link to={`/product/edit/${item._id}`}>
-                      <Button size="small" className="success mr-1">
-                        <FaPencilAlt />
-                      </Button>
-                    </Link>
-                    <Button
-                      size="small"
-                      className="error"
-                      onClick={() => deleteProduct(item._id)}
-                    >
-                      <MdDelete />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
+              );
+            })}
         </div>
 
         {/* Pagination */}
-        {productList.length > 0 && (
+        {totalProductsFiltered > 0 && (
           <div className="d-flex justify-content-center mt-3">
             <Pagination
               color="primary"
               page={page}
               count={totalPages}
-              onChange={(_e, value) => setPage(value)}
+              onChange={(_e, value) => {
+                loadPage(value);
+              }}
               shape="rounded"
             />
           </div>
