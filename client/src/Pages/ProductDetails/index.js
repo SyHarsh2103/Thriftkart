@@ -4,7 +4,7 @@ import QuantityBox from "../../Components/QuantityBox";
 import Button from "@mui/material/Button";
 import { BsCartFill } from "react-icons/bs";
 import { useContext, useEffect, useState } from "react";
-import { FaRegHeart, FaHeart } from "react-icons/fa";
+import { FaRegHeart, FaHeart, FaYoutube } from "react-icons/fa";
 import { MdOutlineCompareArrows } from "react-icons/md";
 import Tooltip from "@mui/material/Tooltip";
 import RelatedProducts from "./RelatedProducts";
@@ -12,6 +12,44 @@ import { useParams } from "react-router-dom";
 import { fetchDataFromApi, postData } from "../../utils/api";
 import CircularProgress from "@mui/material/CircularProgress";
 import { MyContext } from "../../App";
+
+/** 🔹 Helper: parse common YouTube URLs into an embed URL */
+const getYoutubeEmbedUrl = (rawUrl) => {
+  if (!rawUrl || typeof rawUrl !== "string") return null;
+  const url = rawUrl.trim();
+
+  try {
+    // https://www.youtube.com/watch?v=XXXX
+    if (url.includes("youtube.com/watch")) {
+      const u = new URL(url);
+      const v = u.searchParams.get("v");
+      if (v) return `https://www.youtube.com/embed/${v}`;
+    }
+
+    // https://youtu.be/XXXX
+    if (url.includes("youtu.be/")) {
+      const parts = url.split("youtu.be/");
+      const idPart = parts[1]?.split(/[?&#]/)[0];
+      if (idPart) return `https://www.youtube.com/embed/${idPart}`;
+    }
+
+    // already embed
+    if (url.includes("youtube.com/embed/")) {
+      return url;
+    }
+
+    // fallback – last segment as ID
+    const cleaned = url.replace(/\/+$/, "");
+    const lastSegment = cleaned.split("/").pop();
+    if (lastSegment && lastSegment.length >= 8) {
+      return `https://www.youtube.com/embed/${lastSegment}`;
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+};
 
 const ProductDetails = () => {
   const [activeSize, setActiveSize] = useState(null);
@@ -25,8 +63,30 @@ const ProductDetails = () => {
   let [productQuantity, setProductQuantity] = useState();
   const [tabError, setTabError] = useState(false);
 
+  const [rating, setRating] = useState(1);
+  const [reviews, setReviews] = useState({
+    productId: "",
+    customerName: "",
+    customerId: "",
+    review: "",
+    customerRating: 1,
+  });
+
+  const [showVideo, setShowVideo] = useState(false); // 🔹 toggle product video
+
   const { id } = useParams();
   const context = useContext(MyContext);
+
+  // 🔹 Safer user fetch
+  const getCurrentUser = () => {
+    try {
+      const userStr = localStorage.getItem("user");
+      if (!userStr) return null;
+      return JSON.parse(userStr);
+    } catch {
+      return null;
+    }
+  };
 
   const isActive = (index) => {
     setActiveSize(index);
@@ -36,12 +96,16 @@ const ProductDetails = () => {
   useEffect(() => {
     window.scrollTo(0, 0);
     setActiveSize(null);
+    setShowVideo(false);
 
     // fetch product
     fetchDataFromApi(`/api/products/${id}`).then((res) => {
       if (!res) return;
-      setProductData({ ...res, id: res.id || res._id }); // normalize id
 
+      const normalized = { ...res, id: res.id || res._id };
+      setProductData(normalized);
+
+      // If no RAM / Weight / Size → auto-allow addToCart
       if (
         (res?.productRam?.length ?? 0) === 0 &&
         (res?.productWeight?.length ?? 0) === 0 &&
@@ -54,11 +118,11 @@ const ProductDetails = () => {
       fetchDataFromApi(
         `/api/products/subCatId?subCatId=${
           res?.subCatId
-        }&location=${localStorage.getItem("location")}`
+        }&location=${localStorage.getItem("location") || ""}`
       ).then((r) => {
         const filteredData =
           r?.products
-            ?.map((p) => ({ ...p, id: p.id || p._id })) // normalize
+            ?.map((p) => ({ ...p, id: p.id || p._id }))
             ?.filter((item) => item.id !== (res.id || res._id)) || [];
         setRelatedProductData(filteredData);
       });
@@ -70,42 +134,38 @@ const ProductDetails = () => {
     });
 
     // wishlist check
-    const user = JSON.parse(localStorage.getItem("user"));
-    fetchDataFromApi(
-      `/api/my-list?productId=${id}&userId=${user?.userId}`
-    ).then((res) => {
-      if (res?.length !== 0) {
-        setSsAddedToMyList(true);
-      }
-    });
+    const user = getCurrentUser();
+    if (user?.userId) {
+      fetchDataFromApi(
+        `/api/my-list?productId=${id}&userId=${user.userId}`
+      ).then((res) => {
+        if (Array.isArray(res) && res.length !== 0) {
+          setSsAddedToMyList(true);
+        } else {
+          setSsAddedToMyList(false);
+        }
+      });
+    }
 
     context.setEnableFilterTab(false);
   }, [id, context]);
 
-  const [rating, setRating] = useState(1);
-  const [reviews, setReviews] = useState({
-    productId: "",
-    customerName: "",
-    customerId: "",
-    review: "",
-    customerRating: 1,
-  });
-
   const onChangeInput = (e) => {
-    setReviews(() => ({
-      ...reviews,
+    setReviews((prev) => ({
+      ...prev,
       [e.target.name]: e.target.value,
     }));
   };
 
-  const changeRating = (e) => {
-    setRating(e.target.value);
-    setReviews((prev) => ({ ...prev, customerRating: e.target.value }));
+  const changeRating = (newValue) => {
+    const val = newValue || 0;
+    setRating(val);
+    setReviews((prev) => ({ ...prev, customerRating: val }));
   };
 
   const addReview = (e) => {
     e.preventDefault();
-    const user = JSON.parse(localStorage.getItem("user"));
+    const user = getCurrentUser();
 
     if (user) {
       const payload = {
@@ -120,6 +180,7 @@ const ProductDetails = () => {
         postData("/api/productReviews/add", payload).then(() => {
           setIsLoading(false);
           setReviews({ review: "", customerRating: 1 });
+          setRating(1);
           fetchDataFromApi(`/api/productReviews?productId=${id}`).then((res) =>
             setreviewsData(res)
           );
@@ -152,14 +213,25 @@ const ProductDetails = () => {
     }
 
     if (activeSize !== null) {
-      const user = JSON.parse(localStorage.getItem("user"));
+      const user = getCurrentUser();
+      if (!user?.userId) {
+        return context.setAlertBox({
+          open: true,
+          error: true,
+          msg: "Please Login to continue",
+        });
+      }
+
       const data = {
         productTitle: productData?.name,
         image: productData?.images?.[0],
         rating: productData?.rating,
         price: productData?.price,
         quantity: productQuantity,
-        subTotal: parseInt(productData?.price * productQuantity, 10),
+        subTotal: parseInt(
+          (productData?.price || 0) * productQuantity,
+          10
+        ),
         productId: productData?.id,
         countInStock: productData?.countInStock,
         userId: user?.userId,
@@ -176,8 +248,8 @@ const ProductDetails = () => {
   };
 
   const addToMyList = (idVal) => {
-    const user = JSON.parse(localStorage.getItem("user"));
-    if (user) {
+    const user = getCurrentUser();
+    if (user?.userId) {
       const data = {
         productTitle: productData?.name,
         image: productData?.images?.[0],
@@ -196,7 +268,7 @@ const ProductDetails = () => {
           fetchDataFromApi(
             `/api/my-list?productId=${idVal}&userId=${user?.userId}`
           ).then((r) => {
-            if (r?.length !== 0) {
+            if (Array.isArray(r) && r.length !== 0) {
               setSsAddedToMyList(true);
             }
           });
@@ -213,6 +285,16 @@ const ProductDetails = () => {
     }
   };
 
+  // 🔹 Derive video URL from product fields
+  const rawVideoUrl =
+    productData?.youtubeUrl ||
+    productData?.videoUrl ||
+    productData?.youtubeLink ||
+    productData?.videoLink ||
+    null;
+
+  const youtubeEmbedUrl = getYoutubeEmbedUrl(rawVideoUrl);
+
   return (
     <section className="productDetails section">
       <div className="container">
@@ -225,13 +307,44 @@ const ProductDetails = () => {
           </div>
         ) : (
           <div className="row">
+            {/* LEFT: image + video button + video */}
             <div className="col-md-4 pl-5 part1">
               <ProductZoom
                 images={productData?.images}
                 discount={productData?.discount}
               />
+
+              {/* 🔹 Video Button under image */}
+              {youtubeEmbedUrl && (
+                <div className="mt-3">
+                  <Button
+                    variant="outlined"
+                    className="btn-round btn-sml"
+                    onClick={() => setShowVideo((prev) => !prev)}
+                  >
+                    <FaYoutube style={{ fontSize: 18, marginRight: 6 }} />
+                    {showVideo ? "Hide Video" : "Watch Video"}
+                  </Button>
+                </div>
+              )}
+
+              {/* 🔹 Collapsible Video Area */}
+              {youtubeEmbedUrl && showVideo && (
+                <div className="mt-3">
+                  <div className="embed-responsive embed-responsive-16by9 productVideoWrapper">
+                    <iframe
+                      className="embed-responsive-item"
+                      src={youtubeEmbedUrl}
+                      title={productData?.name || "Product video"}
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
+            {/* RIGHT: product info */}
             <div className="col-md-7 pl-5 pr-5 part2">
               <h2 className="hd text-capitalize">{productData?.name}</h2>
 
@@ -248,7 +361,10 @@ const ProductDetails = () => {
                     readOnly
                     size="small"
                   />
-                  <span className="text-light cursor ml-2" onClick={gotoReviews}>
+                  <span
+                    className="text-light cursor ml-2"
+                    onClick={gotoReviews}
+                  >
                     {reviewsData?.length} Review
                     {reviewsData?.length === 1 ? "" : "s"}
                   </span>
@@ -524,7 +640,7 @@ const ProductDetails = () => {
                         name="rating"
                         value={rating}
                         precision={0.5}
-                        onChange={changeRating}
+                        onChange={(_e, newValue) => changeRating(newValue)}
                       />
                       <br />
                       <Button type="submit" className="btn-blue btn-lg btn-big">
