@@ -60,6 +60,8 @@ const ProductUpload = () => {
   const [subCatVal, setSubCatVal] = useState("");
   const [ratingsValue, setRatingValue] = useState(1);
   const [isFeaturedValue, setisFeaturedValue] = useState("");
+  const [isActiveValue, setIsActiveValue] = useState(true); // 👁 Show Product (default ON)
+
   const [catData, setCatData] = useState([]);
   const [subCatData, setSubCatData] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -104,6 +106,16 @@ const ProductUpload = () => {
     size: [],
     productWeight: [],
     location: [],
+
+    // 🎥 YouTube demo / review
+    youtubeUrl: "",
+
+    // 📦 Shipping / packaging (Shiprocket)
+    // units: weight in kg, dimensions in cm
+    shippingWeight: "",
+    shippingLength: "",
+    shippingBreadth: "",
+    shippingHeight: "",
   });
 
   useEffect(() => {
@@ -446,6 +458,19 @@ const ProductUpload = () => {
         productWeight: productWeight,
         location: selectedLocation,
         images: files,
+
+        // 🎥 YouTube demo
+        youtubeUrl: formFields.youtubeUrl,
+
+        // 📦 Shipping / packaging — these go directly to backend,
+        // backend will parse floats
+        shippingWeight: formFields.shippingWeight,
+        shippingLength: formFields.shippingLength,
+        shippingBreadth: formFields.shippingBreadth,
+        shippingHeight: formFields.shippingHeight,
+
+        // 👁 Show Product (ON/OFF)
+        isActive: isActiveValue,
       };
 
       console.log("📦 Payload:", payload);
@@ -622,10 +647,23 @@ const ProductUpload = () => {
             </div>
           </div>
 
+          {/* YouTube URL */}
+          <div className="form-group">
+            <h6>YOUTUBE URL (OPTIONAL)</h6>
+            <input
+              type="url"
+              name="youtubeUrl"
+              placeholder="https://www.youtube.com/watch?v=..."
+              value={formFields.youtubeUrl}
+              onChange={inputChange}
+              style={inputStyle}
+            />
+          </div>
+
           {/* Discount, Featured, Rating */}
           <div className="row">
             <div className="col-md-4 form-group">
-              <h6>DISCOUNT</h6>
+              <h6>DISCOUNT (%)</h6>
               <input
                 type="number"
                 name="discount"
@@ -654,6 +692,21 @@ const ProductUpload = () => {
                 value={ratingsValue}
                 onChange={(_e, val) => setRatingValue(val)}
               />
+            </div>
+          </div>
+
+          {/* Show Product (Active) */}
+          <div className="row">
+            <div className="col-md-4 form-group">
+              <h6>SHOW PRODUCT</h6>
+              <Select
+                value={isActiveValue}
+                onChange={(e) => setIsActiveValue(e.target.value)}
+                className="w-100"
+              >
+                <MenuItem value={true}>ON (Visible)</MenuItem>
+                <MenuItem value={false}>OFF (Hidden)</MenuItem>
+              </Select>
             </div>
           </div>
 
@@ -706,6 +759,54 @@ const ProductUpload = () => {
                   </MenuItem>
                 ))}
               </Select>
+            </div>
+          </div>
+
+          {/* 📦 Shipping / Packaging (for Shiprocket) */}
+          <div className="row">
+            <div className="col-md-3 form-group">
+              <h6>SHIPPING WEIGHT (KG)</h6>
+              <input
+                type="number"
+                step="0.01"
+                name="shippingWeight"
+                value={formFields.shippingWeight || ""}
+                onChange={inputChange}
+                style={inputStyle}
+              />
+            </div>
+            <div className="col-md-3 form-group">
+              <h6>SHIPPING LENGTH (CM)</h6>
+              <input
+                type="number"
+                step="0.1"
+                name="shippingLength"
+                value={formFields.shippingLength || ""}
+                onChange={inputChange}
+                style={inputStyle}
+              />
+            </div>
+            <div className="col-md-3 form-group">
+              <h6>SHIPPING BREADTH (CM)</h6>
+              <input
+                type="number"
+                step="0.1"
+                name="shippingBreadth"
+                value={formFields.shippingBreadth || ""}
+                onChange={inputChange}
+                style={inputStyle}
+              />
+            </div>
+            <div className="col-md-3 form-group">
+              <h6>SHIPPING HEIGHT (CM)</h6>
+              <input
+                type="number"
+                step="0.1"
+                name="shippingHeight"
+                value={formFields.shippingHeight || ""}
+                onChange={inputChange}
+                style={inputStyle}
+              />
             </div>
           </div>
 

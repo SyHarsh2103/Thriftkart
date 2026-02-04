@@ -1,133 +1,170 @@
 const mongoose = require("mongoose");
 
 const productSchema = mongoose.Schema({
-    productId: {
-        type: String,
-        unique: true
+  productId: {
+    type: String,
+    unique: true,
+  },
+  name: {
+    type: String,
+    required: true,
+  },
+  description: {
+    type: String,
+    required: true,
+  },
+  images: [
+    {
+      type: String,
+      required: true,
     },
-    name: {
-        type: String,
-        required: true,
+  ],
+  brand: {
+    type: String,
+    default: "",
+  },
+  price: {
+    type: Number,
+    default: 0,
+  },
+  oldPrice: {
+    type: Number,
+    default: 0,
+  },
+  catName: {
+    type: String,
+    default: "",
+  },
+  catId: {
+    type: String,
+    default: "",
+  },
+  subCatId: {
+    type: String,
+    default: "",
+  },
+  subCat: {
+    type: String,
+    default: "",
+  },
+  subCatName: {
+    type: String,
+    default: "",
+  },
+  category: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Category",
+    required: true,
+  },
+  countInStock: {
+    type: Number,
+    required: true,
+  },
+  rating: {
+    type: Number,
+    default: 0,
+  },
+  isFeatured: {
+    type: Boolean,
+    default: false,
+  },
+  discount: {
+    type: Number,
+    required: true,
+  },
+  productRam: [
+    {
+      type: String,
+      default: null,
     },
-    description: {
-        type: String,
-        required: true
+  ],
+  size: [
+    {
+      type: String,
+      default: null,
     },
-    images: [
-        {
-            type: String,
-            required: true
-        }
-    ],
-    brand: {
-        type: String,
-        default: ''
+  ],
+  productWeight: [
+    {
+      type: String,
+      default: null,
     },
-    price: {
-        type: Number,
-        default: 0
-    },
-    oldPrice: {
-        type: Number,
-        default: 0
-    },
-    catName:{
-        type:String,
-        default:''
-    },
-    catId:{
-        type:String,
-        default:''
-    },
-    subCatId:{
-        type:String,
-        default:''
-    },
-    subCat:{
-        type:String,
-        default:''
-    },
-    subCatName:{
-        type:String,
-        default:''
-    },
-    category: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Category',
-        required: true
-    },
-    countInStock: {
-        type: Number,
-        required: true,
-    },
-    rating: {
-        type: Number,
-        default: 0,
-    },
-    isFeatured: {
-        type: Boolean,
-        default: false,
-    },
-    discount: {
-        type: Number,
-        required: true,
-    },
-    productRam: [
-        {
-            type: String,
-            default: null,
-        }
-    ],
-    size: [
-        {
-            type: String,
-            default: null,
-        }
-    ],
-    productWeight: [
-        {
-            type: String,
-            default: null,
-        }
-    ],
-    location: [
+  ],
+  location: [
     {
       value: {
         type: String,
       },
       label: {
         type: String,
-      }
+      },
     },
   ],
-    dateCreated: {
-        type: Date,
-        default: Date.now,
-    },
-})
 
+  // ==========================
+  // NEW FIELDS
+  // ==========================
 
-productSchema.virtual('id').get(function () {
-    return this._id.toHexString();
+  // 🎥 Product YouTube link (demo / review / how-to)
+  youtubeUrl: {
+    type: String,
+    default: "",
+  },
+
+  // 📦 Shipping / parcel details for Shiprocket (per product)
+  // Units suggested:
+  // - shippingWeight: kilograms
+  // - shippingLength/Breadth/Height: centimeters
+  shippingWeight: {
+    type: Number,
+    default: 0,
+  },
+  shippingLength: {
+    type: Number,
+    default: 0,
+  },
+  shippingBreadth: {
+    type: Number,
+    default: 0,
+  },
+  shippingHeight: {
+    type: Number,
+    default: 0,
+  },
+
+  // 👁️ Show Product ON/OFF (default = ON)
+  isActive: {
+    type: Boolean,
+    default: true,
+  },
+
+  dateCreated: {
+    type: Date,
+    default: Date.now,
+  },
+});
+
+productSchema.virtual("id").get(function () {
+  return this._id.toHexString();
 });
 
 // Function to generate unique 6-character ID (2 letters + 4 digits)
 function generateUniqueProductId() {
-    const letters = 'TKOR';
-    const randomNumbers = Math.floor(1000 + Math.random() * 9000); // Ensures 4-digit number
-    return letters + randomNumbers;
+  const letters = "TKOR";
+  const randomNumbers = Math.floor(1000 + Math.random() * 9000); // Ensures 4-digit number
+  return letters + randomNumbers;
 }
 
-// Pre-save middleware to set orderId before saving
-productSchema.pre('save', function (next) {
+// Pre-save middleware to set productId before saving
+productSchema.pre("save", function (next) {
   if (!this.productId) {
     this.productId = generateUniqueProductId();
   }
   next();
 });
 
-productSchema.set('toJSON', {
-    virtuals: true,
+productSchema.set("toJSON", {
+  virtuals: true,
 });
 
-exports.Product = mongoose.model('Product', productSchema);
+exports.Product = mongoose.model("Product", productSchema);

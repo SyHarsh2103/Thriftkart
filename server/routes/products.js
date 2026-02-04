@@ -77,6 +77,21 @@ const parseIntOr = (v, d) => {
   return Number.isFinite(n) ? n : d;
 };
 
+const parseFloatOr = (v, d) => {
+  const n = parseFloat(v);
+  return Number.isFinite(n) ? n : d;
+};
+
+const parseBoolOr = (v, d) => {
+  if (typeof v === "boolean") return v;
+  if (typeof v === "string") {
+    const val = v.toLowerCase().trim();
+    if (["true", "1", "yes", "on"].includes(val)) return true;
+    if (["false", "0", "no", "off"].includes(val)) return false;
+  }
+  return d;
+};
+
 const normalizeLocationFilter = (location) => {
   if (!location || location === "All") return {};
   // Your schema stores either string or [{value,label}] — handle both
@@ -89,6 +104,7 @@ const normalizeLocationFilter = (location) => {
 };
 
 const buildBaseQuery = ({ catId, subCatId, location }) => {
+  // isActive: false = hidden. Default (undefined/true) = visible.
   const q = { isActive: { $ne: false } };
   if (catId) q.catId = catId;
   if (subCatId) q.subCatId = subCatId;
@@ -166,6 +182,19 @@ router.post("/create", async (req, res) => {
       productWeight: req.body.productWeight,
       location:
         req.body.location && req.body.location !== "" ? req.body.location : "All",
+
+      // 🎥 NEW: YouTube link
+      youtubeUrl: req.body.youtubeUrl || "",
+
+      // 📦 NEW: Shipping / packaging details for Shiprocket
+      // units: weight in kg, dimensions in cm
+      shippingWeight: parseFloatOr(req.body.shippingWeight, 0),
+      shippingLength: parseFloatOr(req.body.shippingLength, 0),
+      shippingBreadth: parseFloatOr(req.body.shippingBreadth, 0),
+      shippingHeight: parseFloatOr(req.body.shippingHeight, 0),
+
+      // 👁 NEW: Show product on/off (default ON)
+      isActive: parseBoolOr(req.body.isActive, true),
     });
 
     const saved = await product.save();
@@ -469,6 +498,7 @@ router.get("/:id", async (req, res) => {
 
     res.status(200).json({
       id: p._id,
+      productId: p.productId,
       name: p.name,
       description: p.description,
       images: imageUrls,
@@ -489,6 +519,19 @@ router.get("/:id", async (req, res) => {
       size: p.size || [],
       productWeight: p.productWeight || [],
       location: p.location || [],
+
+      // 🎥 NEW
+      youtubeUrl: p.youtubeUrl || "",
+
+      // 📦 NEW
+      shippingWeight: p.shippingWeight ?? 0,
+      shippingLength: p.shippingLength ?? 0,
+      shippingBreadth: p.shippingBreadth ?? 0,
+      shippingHeight: p.shippingHeight ?? 0,
+
+      // 👁 NEW
+      isActive: p.isActive !== false,
+      dateCreated: p.dateCreated,
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -563,6 +606,30 @@ router.put("/:id", async (req, res) => {
 
     if (Array.isArray(req.body.images)) {
       updateData.images = req.body.images;
+    }
+
+    // 🎥 allow updating YouTube link
+    if (typeof req.body.youtubeUrl !== "undefined") {
+      updateData.youtubeUrl = req.body.youtubeUrl;
+    }
+
+    // 📦 allow updating shipping details (cast to float)
+    if (typeof req.body.shippingWeight !== "undefined") {
+      updateData.shippingWeight = parseFloatOr(req.body.shippingWeight, 0);
+    }
+    if (typeof req.body.shippingLength !== "undefined") {
+      updateData.shippingLength = parseFloatOr(req.body.shippingLength, 0);
+    }
+    if (typeof req.body.shippingBreadth !== "undefined") {
+      updateData.shippingBreadth = parseFloatOr(req.body.shippingBreadth, 0);
+    }
+    if (typeof req.body.shippingHeight !== "undefined") {
+      updateData.shippingHeight = parseFloatOr(req.body.shippingHeight, 0);
+    }
+
+    // 👁 ON/OFF toggle
+    if (typeof req.body.isActive !== "undefined") {
+      updateData.isActive = parseBoolOr(req.body.isActive, true);
     }
 
     const updated = await Product.findByIdAndUpdate(req.params.id, updateData, {

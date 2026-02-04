@@ -63,6 +63,8 @@ const EditProduct = () => {
   const [subCatVal, setSubCatVal] = useState("");
   const [ratingsValue, setRatingValue] = useState(1);
   const [isFeaturedValue, setisFeaturedValue] = useState("");
+  const [isActiveValue, setIsActiveValue] = useState(true); // 👁 Show product ON/OFF
+
   const [catData, setCatData] = useState([]);
   const [subCatData, setSubCatData] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -104,6 +106,16 @@ const EditProduct = () => {
     size: [],
     productWeight: [],
     location: [],
+
+    // 🎥 YouTube demo / review
+    youtubeUrl: "",
+
+    // 📦 Shipping / packaging (Shiprocket)
+    // units: weight in kg, dimensions in cm
+    shippingWeight: "",
+    shippingLength: "",
+    shippingBreadth: "",
+    shippingHeight: "",
   });
 
   // ============ 1) Load dropdown data (same style as Add Product) ============
@@ -164,7 +176,6 @@ const EditProduct = () => {
   }, [context.catData, context?.countryList]);
 
   // ============ 2) Load product by ID and pre-fill form ============
-
   useEffect(() => {
     if (!id) return;
 
@@ -215,12 +226,22 @@ const EditProduct = () => {
           size: res.size || [],
           productWeight: res.productWeight || [],
           location: res.location || [],
+
+          youtubeUrl: res.youtubeUrl || "",
+
+          shippingWeight: res.shippingWeight ?? "",
+          shippingLength: res.shippingLength ?? "",
+          shippingBreadth: res.shippingBreadth ?? "",
+          shippingHeight: res.shippingHeight ?? "",
         });
 
         setcategoryVal(catId);
         setSubCatVal(subId);
         setRatingValue(res.rating || 0);
         setisFeaturedValue(res.isFeatured);
+        setIsActiveValue(
+          typeof res.isActive === "boolean" ? res.isActive : true
+        );
         setProductRams(res.productRam || []);
         setProductWeight(res.productWeight || []);
         setProductSize(res.size || []);
@@ -403,7 +424,6 @@ const EditProduct = () => {
   };
 
   // ============ Submit Edited Product (PUT) ============
-
   const updateProduct = async (e) => {
     e.preventDefault();
 
@@ -498,7 +518,16 @@ const EditProduct = () => {
         size: productSize,
         productWeight: productWeight,
         location: selectedLocation,
-        images: files, // 👈 FILENAMES ONLY
+        images: files, // filenames only
+
+        youtubeUrl: formFields.youtubeUrl,
+
+        shippingWeight: formFields.shippingWeight,
+        shippingLength: formFields.shippingLength,
+        shippingBreadth: formFields.shippingBreadth,
+        shippingHeight: formFields.shippingHeight,
+
+        isActive: isActiveValue,
       };
 
       await editData(`/api/products/${id}`, payload);
@@ -522,7 +551,6 @@ const EditProduct = () => {
   };
 
   // ============ JSX (same layout as Add Product) ============
-
   return (
     <div className="right-content w-100">
       <div className="card shadow border-0 w-100 flex-row p-4">
@@ -674,6 +702,19 @@ const EditProduct = () => {
             </div>
           </div>
 
+          {/* YouTube URL */}
+          <div className="form-group">
+            <h6>YOUTUBE URL (OPTIONAL)</h6>
+            <input
+              type="url"
+              name="youtubeUrl"
+              placeholder="https://www.youtube.com/watch?v=..."
+              value={formFields.youtubeUrl}
+              onChange={inputChange}
+              style={inputStyle}
+            />
+          </div>
+
           {/* Discount, Featured, Rating */}
           <div className="row">
             <div className="col-md-4 form-group">
@@ -706,6 +747,21 @@ const EditProduct = () => {
                 value={ratingsValue}
                 onChange={(_e, val) => setRatingValue(val)}
               />
+            </div>
+          </div>
+
+          {/* Show Product (Active) */}
+          <div className="row">
+            <div className="col-md-4 form-group">
+              <h6>SHOW PRODUCT</h6>
+              <Select
+                value={isActiveValue}
+                onChange={(e) => setIsActiveValue(e.target.value)}
+                className="w-100"
+              >
+                <MenuItem value={true}>ON (Visible)</MenuItem>
+                <MenuItem value={false}>OFF (Hidden)</MenuItem>
+              </Select>
             </div>
           </div>
 
@@ -758,6 +814,54 @@ const EditProduct = () => {
                   </MenuItem>
                 ))}
               </Select>
+            </div>
+          </div>
+
+          {/* 📦 Shipping / Packaging (for Shiprocket) */}
+          <div className="row">
+            <div className="col-md-3 form-group">
+              <h6>SHIPPING WEIGHT (KG)</h6>
+              <input
+                type="number"
+                step="0.01"
+                name="shippingWeight"
+                value={formFields.shippingWeight || ""}
+                onChange={inputChange}
+                style={inputStyle}
+              />
+            </div>
+            <div className="col-md-3 form-group">
+              <h6>SHIPPING LENGTH (CM)</h6>
+              <input
+                type="number"
+                step="0.1"
+                name="shippingLength"
+                value={formFields.shippingLength || ""}
+                onChange={inputChange}
+                style={inputStyle}
+              />
+            </div>
+            <div className="col-md-3 form-group">
+              <h6>SHIPPING BREADTH (CM)</h6>
+              <input
+                type="number"
+                step="0.1"
+                name="shippingBreadth"
+                value={formFields.shippingBreadth || ""}
+                onChange={inputChange}
+                style={inputStyle}
+              />
+            </div>
+            <div className="col-md-3 form-group">
+              <h6>SHIPPING HEIGHT (CM)</h6>
+              <input
+                type="number"
+                step="0.1"
+                name="shippingHeight"
+                value={formFields.shippingHeight || ""}
+                onChange={inputChange}
+                style={inputStyle}
+              />
             </div>
           </div>
 

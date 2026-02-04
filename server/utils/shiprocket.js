@@ -1,17 +1,17 @@
 // server/utils/shiprocket.js
 // Helper for Shiprocket API integration (login + create order)
 //
-// V3:
+// V3 (enhanced with product shipping dimensions):
 //  - Forward shipment: creates a Shiprocket order from your Orders model (COD + Online)
 //  - Reverse pickup: creates a Shiprocket return shipment (reverse pickup)
 //  - Tracking refresh: fetch latest status for an existing shipment
 //  - Returns normalized "shippingInfo" objects that fit Orders.shiprocket
 //
-// NOTE: Reverse pickup payload (create/return) MUST be verified against
-// Shiprocket's official docs / Postman collection. Field names like
-// `reference_order_id`, `is_return` etc. may need tweaks.
+// Now uses Product.shippingWeight / shippingLength / shippingBreadth / shippingHeight
+// to build package dimensions for Shiprocket.
 
 const axios = require("axios");
+const { Product } = require("../models/products"); // 👈 NEW: use product shipping fields
 
 // ========== ENV CONFIG ==========
 //
@@ -43,6 +43,14 @@ const DEFAULT_CITY = process.env.SHIPROCKET_DEFAULT_CITY || "Ahmedabad";
 const DEFAULT_STATE = process.env.SHIPROCKET_DEFAULT_STATE || "Gujarat";
 const DEFAULT_COUNTRY = process.env.SHIPROCKET_DEFAULT_COUNTRY || "India";
 const DEFAULT_PHONE = process.env.SHIPROCKET_DEFAULT_PHONE || "9999999999";
+
+// 📦 Fallback package dimensions (cm + kg) if product fields missing
+const FALLBACK_DIMENSIONS = {
+  length: 10,
+  breadth: 10,
+  height: 10,
+  weight: 0.5, // kg
+};
 
 // Very simple in-memory token cache
 let cachedToken = null;
@@ -92,6 +100,72 @@ async function getShiprocketToken() {
   }
 }
 
+// 🔹 NEW: compute dimensions & weight from order.products + Product model
+async function computeDimensionsFromProducts(orderDoc) {
+  if (!orderDoc || !Array.isArray(orderDoc.products) || !orderDoc.products.length) {
+    return { ...FALLBACK_DIMENSIONS };
+  }
+
+  let totalWeight = 0;
+  let maxLen = 0;
+  let maxBrd = 0;
+  let maxHgt = 0;
+
+  for (const line of orderDoc.products) {
+    const qtyRaw =
+      line.quantity || line.units || line.qty || line.count || 1;
+    const qty = Number(qtyRaw) > 0 ? Number(qtyRaw) : 1;
+
+    const prodId =
+      line.productId || line.prodId || line._id || line.id || null;
+
+    let productDoc = null;
+    if (prodId) {
+      try {
+        productDoc = await Product.findById(prodId).lean();
+      } catch (err) {
+        console.warn(
+          "Shiprocket: Product not found for id in order.products:",
+          prodId
+        );
+      }
+    }
+
+    const weight =
+      Number(productDoc?.shippingWeight) > 0
+        ? Number(productDoc.shippingWeight)
+        : FALLBACK_DIMENSIONS.weight;
+
+    const len =
+      Number(productDoc?.shippingLength) > 0
+        ? Number(productDoc.shippingLength)
+        : FALLBACK_DIMENSIONS.length;
+
+    const brd =
+      Number(productDoc?.shippingBreadth) > 0
+        ? Number(productDoc.shippingBreadth)
+        : FALLBACK_DIMENSIONS.breadth;
+
+    const hgt =
+      Number(productDoc?.shippingHeight) > 0
+        ? Number(productDoc.shippingHeight)
+        : FALLBACK_DIMENSIONS.height;
+
+    // Aggregate:
+    totalWeight += weight * qty;
+    maxLen = Math.max(maxLen, len);
+    maxBrd = Math.max(maxBrd, brd);
+    maxHgt = Math.max(maxHgt, hgt);
+  }
+
+  return {
+    length: maxLen || FALLBACK_DIMENSIONS.length,
+    breadth: maxBrd || FALLBACK_DIMENSIONS.breadth,
+    height: maxHgt || FALLBACK_DIMENSIONS.height,
+    weight: totalWeight || FALLBACK_DIMENSIONS.weight,
+  };
+}
+
 // Map your Orders document into Shiprocket's FORWARD order payload
 function buildShiprocketOrderPayload(orderDoc, extraOptions = {}) {
   if (!orderDoc) {
@@ -130,14 +204,11 @@ function buildShiprocketOrderPayload(orderDoc, extraOptions = {}) {
 
   const subTotal = Number(orderDoc.amount) || 0;
 
-  // Dimensions: ideally from your product model; for now, static safe defaults.
-  // You can override via extraOptions.dimensions = { length, breadth, height, weight }
-  const dims = extraOptions.dimensions || {
-    length: 10,
-    breadth: 10,
-    height: 10,
-    weight: 0.5,
-  };
+  // 📦 Dimensions:
+  // - if extraOptions.dimensions is passed, we use that
+  // - otherwise caller (createShiprocketOrderRaw / createShiprocketReversePickupRaw)
+  //   injects the result of computeDimensionsFromProducts(orderDoc)
+  const dims = extraOptions.dimensions || { ...FALLBACK_DIMENSIONS };
 
   const payload = {
     order_id: orderId,
@@ -170,7 +241,7 @@ function buildShiprocketOrderPayload(orderDoc, extraOptions = {}) {
     discount: extraOptions.discount || 0,
     total_discount: extraOptions.total_discount || 0,
 
-    // Dimensions
+    // Dimensions (cm + kg)
     length: dims.length,
     breadth: dims.breadth,
     height: dims.height,
@@ -181,16 +252,6 @@ function buildShiprocketOrderPayload(orderDoc, extraOptions = {}) {
 }
 
 // ---------- Reverse pickup payload ----------
-//
-// For reverse pickup, Shiprocket expects a payload *very similar* to forward
-// orders, but via /external/shipments/create/return and usually with:
-//   - a new "return order_id" (commonly original + "R")
-//   - some reference to the original order/shipment (e.g. reference_order_id)
-//   - marked as "return" / "reverse pickup" via specific fields
-//
-// ⚠️ You MUST verify exact field names against Shiprocket's official docs /
-// Postman collection. Adjust keys like `reference_order_id`, `is_return`,
-// etc., to match their spec for your account.
 function buildShiprocketReversePickupPayload(orderDoc, extraOptions = {}) {
   const base = buildShiprocketOrderPayload(orderDoc, extraOptions);
 
@@ -202,16 +263,11 @@ function buildShiprocketReversePickupPayload(orderDoc, extraOptions = {}) {
     ...base,
     order_id: returnOrderId,
 
-    // Common pattern in many integrations:
-    //  - reference original order for dashboard mapping
     reference_order_id:
       extraOptions.reference_order_id || originalOrderId,
 
-    // Some merchants mark explicit reverse pickup flags.
-    // You MUST confirm exact keys in Shiprocket docs for your account.
     is_return: 1,
 
-    // You could also pass reason / comment if your account supports it:
     reason: extraOptions.reason || "Customer return / reverse pickup",
     comment: extraOptions.comment || "",
   };
@@ -227,7 +283,14 @@ function buildShiprocketReversePickupPayload(orderDoc, extraOptions = {}) {
  */
 async function createShiprocketOrderRaw(orderDoc, extraOptions = {}) {
   const token = await getShiprocketToken();
-  const payload = buildShiprocketOrderPayload(orderDoc, extraOptions);
+
+  // 👇 NEW: compute dimensions from Product.shipping* and inject into extraOptions
+  const dims = await computeDimensionsFromProducts(orderDoc);
+
+  const payload = buildShiprocketOrderPayload(orderDoc, {
+    ...extraOptions,
+    dimensions: dims,
+  });
 
   const res = await axios.post(
     `${SHIPROCKET_BASE_URL}/external/orders/create/adhoc`,
@@ -252,30 +315,11 @@ async function createShiprocketOrderRaw(orderDoc, extraOptions = {}) {
 
 /**
  * High-level function used by routes/orders.js
- *
- *   const shippingInfo = await createShiprocketOrder(savedOrder, { paymentType });
- *
- * It returns a normalized object that fits Orders.shiprocket:
- *   {
- *     enabled: true,
- *     sr_order_id,
- *     shipment_id,
- *     status,
- *     awb_code,
- *     courier,
- *     label_url,
- *     manifest_url,
- *     tracking_url,
- *     raw
- *   }
- *
- * If anything fails, it throws an Error (caught by syncWithShiprocket).
  */
 async function createShiprocketOrder(orderDoc, extraOptions = {}) {
   try {
     const raw = await createShiprocketOrderRaw(orderDoc, extraOptions);
 
-    // Shiprocket responses can vary slightly, so we try multiple keys safely.
     const shippingInfo = {
       enabled: true,
 
@@ -316,14 +360,10 @@ async function createShiprocketOrder(orderDoc, extraOptions = {}) {
         null,
 
       manifest_url:
-        raw?.manifest_url ||
-        raw?.manifest ||
-        null,
+        raw?.manifest_url || raw?.manifest || null,
 
       tracking_url:
-        raw?.tracking_url ||
-        raw?.tracking_page_url ||
-        null,
+        raw?.tracking_url || raw?.tracking_page_url || null,
 
       raw,
     };
@@ -338,27 +378,23 @@ async function createShiprocketOrder(orderDoc, extraOptions = {}) {
   }
 }
 
-// Backwards-compat alias (if you used old name somewhere)
+// Backwards-compat alias
 async function createShiprocketOrderFromOrder(orderDoc, extraOptions = {}) {
   return createShiprocketOrder(orderDoc, extraOptions);
 }
 
 // ========== Public API (reverse pickup / return shipments) ==========
 
-/**
- * Low-level: create a **reverse pickup** / return shipment in Shiprocket.
- *
- * NOTE: Endpoint & payload here use common conventions:
- *   POST /external/shipments/create/return
- * with a body similar to forward orders.
- *
- * You MUST open Shiprocket's docs / Postman and confirm the exact
- * endpoint and body fields for your account plan – some keys like
- * `reference_order_id`, `is_return` may differ.
- */
 async function createShiprocketReversePickupRaw(orderDoc, extraOptions = {}) {
   const token = await getShiprocketToken();
-  const payload = buildShiprocketReversePickupPayload(orderDoc, extraOptions);
+
+  // 👇 Use same dimensions logic for reverse pickup
+  const dims = await computeDimensionsFromProducts(orderDoc);
+
+  const payload = buildShiprocketReversePickupPayload(orderDoc, {
+    ...extraOptions,
+    dimensions: dims,
+  });
 
   const res = await axios.post(
     `${SHIPROCKET_BASE_URL}/external/shipments/create/return`,
@@ -381,10 +417,6 @@ async function createShiprocketReversePickupRaw(orderDoc, extraOptions = {}) {
   return res.data;
 }
 
-/**
- * High-level helper to be used from Return Requests route when
- * admin sets status to "pickup_scheduled".
- */
 async function createShiprocketReversePickup(orderDoc, extraOptions = {}) {
   try {
     const raw = await createShiprocketReversePickupRaw(
@@ -432,14 +464,10 @@ async function createShiprocketReversePickup(orderDoc, extraOptions = {}) {
         null,
 
       manifest_url:
-        raw?.manifest_url ||
-        raw?.manifest ||
-        null,
+        raw?.manifest_url || raw?.manifest || null,
 
       tracking_url:
-        raw?.tracking_url ||
-        raw?.tracking_page_url ||
-        null,
+        raw?.tracking_url || raw?.tracking_page_url || null,
 
       raw,
     };
@@ -456,25 +484,6 @@ async function createShiprocketReversePickup(orderDoc, extraOptions = {}) {
 
 // ========== Public API (tracking refresh) ==========
 
-/**
- * Fetch latest tracking / status information for an existing shipment.
- *
- * Called from routes/orders.js like:
- *   const tracking = await fetchShiprocketTrackingInfo({
- *     shipment_id,
- *     awb_code,
- *     sr_order_id,
- *   });
- *
- * Returns a normalized object:
- * {
- *   status,
- *   awb_code,
- *   courier,
- *   tracking_url,
- *   raw
- * }
- */
 async function fetchShiprocketTrackingInfo({
   shipment_id,
   awb_code,
@@ -490,15 +499,12 @@ async function fetchShiprocketTrackingInfo({
 
   let url;
   if (awb_code) {
-    // Prefer tracking by AWB
     url = `${SHIPROCKET_BASE_URL}/external/courier/track/awb/${encodeURIComponent(
       awb_code
     )}`;
   } else if (shipment_id) {
-    // Fallback: shipment id
     url = `${SHIPROCKET_BASE_URL}/external/courier/track/shipment/${shipment_id}`;
   } else {
-    // Last fallback: by Shiprocket order id (if supported on your plan)
     url = `${SHIPROCKET_BASE_URL}/external/courier/track?order_id=${encodeURIComponent(
       sr_order_id
     )}`;
