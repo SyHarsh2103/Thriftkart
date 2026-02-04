@@ -10,7 +10,7 @@ import { MyContext } from "../../App";
 import ProductZoom from "../ProductZoom";
 import { IoCartSharp } from "react-icons/io5";
 import { fetchDataFromApi, postData } from "../../utils/api";
-import { FaHeart } from "react-icons/fa";
+import { FaHeart, FaYoutube } from "react-icons/fa";
 
 /** 🔹 Helper: parse common YouTube URLs into an embed URL */
 const getYoutubeEmbedUrl = (rawUrl) => {
@@ -18,26 +18,26 @@ const getYoutubeEmbedUrl = (rawUrl) => {
   const url = rawUrl.trim();
 
   try {
-    // Handle ?v= style
+    // https://www.youtube.com/watch?v=XXXX
     if (url.includes("youtube.com/watch")) {
       const u = new URL(url);
       const v = u.searchParams.get("v");
       if (v) return `https://www.youtube.com/embed/${v}`;
     }
 
-    // Handle youtu.be short links
+    // https://youtu.be/XXXX
     if (url.includes("youtu.be/")) {
       const parts = url.split("youtu.be/");
       const idPart = parts[1]?.split(/[?&#]/)[0];
       if (idPart) return `https://www.youtube.com/embed/${idPart}`;
     }
 
-    // Already embed style
+    // already embed
     if (url.includes("youtube.com/embed/")) {
       return url;
     }
 
-    // Fallback: very simple last segment
+    // fallback – last segment
     const cleaned = url.replace(/\/+$/, "");
     const lastSegment = cleaned.split("/").pop();
     if (lastSegment && lastSegment.length >= 8) {
@@ -52,11 +52,12 @@ const getYoutubeEmbedUrl = (rawUrl) => {
 
 const ProductModal = (props) => {
   const [productQuantity, setProductQuantity] = useState(1);
-  const [cartFields] = useState({});
+  const [cartFields, setCartFields] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [activeSize, setActiveSize] = useState(null);
   const [tabError, setTabError] = useState(false);
   const [isAddedToMyList, setSsAddedToMyList] = useState(false);
+  const [showVideo, setShowVideo] = useState(false); // 🔹 toggle video
 
   const context = useContext(MyContext);
 
@@ -74,7 +75,7 @@ const ProductModal = (props) => {
   // Support both id and _id
   const productId = props?.data?.id || props?.data?._id || null;
 
-  // 🔹 Detect possible video link fields from product data
+  // Possible video link fields from product data
   const rawVideoUrl =
     props?.data?.youtubeUrl ||
     props?.data?.videoUrl ||
@@ -89,12 +90,14 @@ const ProductModal = (props) => {
     const weight = props?.data?.productWeight || [];
     const sizeArr = props?.data?.size || [];
 
-    // If product has no RAM / Weight / Size → auto-allow addToCart (no size selection needed)
+    // If product has no RAM / Weight / Size → auto-allow addToCart
     if (ram.length === 0 && weight.length === 0 && sizeArr.length === 0) {
       setActiveSize(1);
     } else {
       setActiveSize(null);
     }
+
+    setShowVideo(false); // reset when modal opens for a new product
 
     // Check if already in My List
     const user = getCurrentUser();
@@ -106,6 +109,8 @@ const ProductModal = (props) => {
       .then((res) => {
         if (Array.isArray(res) && res.length !== 0) {
           setSsAddedToMyList(true);
+        } else {
+          setSsAddedToMyList(false);
         }
       })
       .catch((err) => {
@@ -149,20 +154,20 @@ const ProductModal = (props) => {
 
     setIsLoading(true);
 
-    cartFields.productTitle = props?.data?.name;
-    cartFields.image = props?.data?.images?.[0];
-    cartFields.rating = props?.data?.rating;
-    cartFields.price = props?.data?.price;
-    cartFields.quantity = productQuantity;
-    cartFields.subTotal = parseInt(
-      (props?.data?.price || 0) * productQuantity,
-      10
-    );
-    cartFields.productId = productId;
-    cartFields.countInStock = props?.data?.countInStock;
-    cartFields.userId = user.userId;
+    const payload = {
+      productTitle: props?.data?.name,
+      image: props?.data?.images?.[0],
+      rating: props?.data?.rating,
+      price: props?.data?.price,
+      quantity: productQuantity,
+      subTotal: parseInt((props?.data?.price || 0) * productQuantity, 10),
+      productId: productId,
+      countInStock: props?.data?.countInStock,
+      userId: user.userId,
+    };
 
-    context.addToCart(cartFields);
+    setCartFields(payload);
+    context.addToCart(payload);
 
     setTimeout(() => {
       setIsLoading(false);
@@ -254,17 +259,30 @@ const ProductModal = (props) => {
         <hr />
 
         <div className="row mt-2 productDetaileModal">
-          {/* LEFT: Images + Video */}
+          {/* LEFT: Images + Video Button + Optional Video */}
           <div className="col-md-5">
             <ProductZoom
               images={props?.data?.images}
               discount={props?.data?.discount}
             />
 
-            {/* 🔹 Product YouTube Video (if link provided) */}
+            {/* 🔹 Video Button */}
             {youtubeEmbedUrl && (
               <div className="mt-3">
-                <h6 className="mb-2">Product Video</h6>
+                <Button
+                  variant="outlined"
+                  className="btn-round btn-sml"
+                  onClick={() => setShowVideo((prev) => !prev)}
+                >
+                  <FaYoutube style={{ fontSize: 18, marginRight: 6 }} />
+                  {showVideo ? "Hide Video" : "Watch Video"}
+                </Button>
+              </div>
+            )}
+
+            {/* 🔹 Collapsible Video Area */}
+            {youtubeEmbedUrl && showVideo && (
+              <div className="mt-3">
                 <div className="embed-responsive embed-responsive-16by9 productVideoWrapper">
                   <iframe
                     className="embed-responsive-item"

@@ -1167,3 +1167,16 @@ input[type=number]::-webkit-outer-spin-button {
 .productItem .product-skeleton.MuiSkeleton-root {
   height: 260px !important;
 }
+
+.productVideoWrapper {
+  border-radius: 8px;
+  overflow: hidden;
+  background: #000;
+}
+
+.productVideoWrapper iframe {
+  width: 100%;
+  height: 260px;
+  border: 0;
+}
+
