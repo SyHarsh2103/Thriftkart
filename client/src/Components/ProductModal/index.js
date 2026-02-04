@@ -212,7 +212,7 @@ const ProductModal = (props) => {
                         }
 
 
-                        {/* {
+                        {
                             props?.data?.productWeight?.length !== 0 &&
                             <div className='productSize d-flex align-items-center'>
                                 <span>Weight:</span>
@@ -227,7 +227,7 @@ const ProductModal = (props) => {
 
                                 </ul>
                             </div>
-                        } */}
+                        }
 
 
 
