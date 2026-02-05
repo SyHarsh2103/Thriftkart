@@ -3,11 +3,12 @@ const nodemailer = require("nodemailer");
 
 // Read env vars once
 const {
-  EMAIL,
-  EMAIL_PASS,
-  EMAIL_HOST,
-  EMAIL_PORT,
-  EMAIL_FROM_NAME,
+  EMAIL,              // SMTP username (Hostinger mailbox)
+  EMAIL_PASS,         // SMTP password (or app password)
+  EMAIL_HOST,         // e.g. smtp.hostinger.com
+  EMAIL_PORT,         // 465 or 587
+  EMAIL_FROM_NAME,    // e.g. "Thriftkart"
+  EMAIL_FROM,         // e.g. "no-reply@thriftkart.com"
   NODE_ENV,
 } = process.env;
 
@@ -18,18 +19,21 @@ if (!EMAIL || !EMAIL_PASS) {
   );
 }
 
-// Create reusable transporter
+// Determine port + secure flag
 const port = EMAIL_PORT ? Number(EMAIL_PORT) : 465;
+const secure = port === 465;
+
+// Create reusable transporter
 const transporter = nodemailer.createTransport({
-  host: EMAIL_HOST || "smtp.gmail.com",
+  host: EMAIL_HOST || "smtp.hostinger.com", // default to Hostinger
   port,
-  secure: port === 465, // true for 465, false for 587 / others
+  secure, // true for 465, false for 587 / others
   auth: {
     user: EMAIL,
     pass: EMAIL_PASS,
   },
   tls: {
-    // In dev you can relax TLS a bit if needed; in prod keep strict
+    // In dev you can relax TLS a bit; in prod keep strict
     rejectUnauthorized: NODE_ENV === "production",
   },
 });
@@ -53,15 +57,16 @@ async function sendEmail(to, subject, text, html) {
 
   try {
     const fromName = EMAIL_FROM_NAME || "Thriftkart";
+    const fromAddress = EMAIL_FROM || EMAIL; // custom FROM or fallback to auth user
+
     const info = await transporter.sendMail({
-      from: `"${fromName}" <${EMAIL}>`,
+      from: `"${fromName}" <${fromAddress}>`,
       to,
       subject,
       text,
       html,
     });
 
-    // In non-prod, you can log the messageId for debugging
     if (NODE_ENV !== "production") {
       console.log("📧 Email sent:", info.messageId);
     }
