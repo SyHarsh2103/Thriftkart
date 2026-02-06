@@ -231,14 +231,22 @@ const Cart = () => {
                             </div>
                           </div>
 
-                          {/* Remove button */}
+                          {/* SINGLE Remove button */}
                           <button
                             type="button"
-                            className="cartItemRemoveBtn"
+                            className="cartItemRemoveBtn d-flex align-items-center"
                             onClick={() => removeItem(item?._id)}
                             aria-label="Remove item"
                           >
-                            <IoIosClose />
+                            <IoIosClose style={{ fontSize: 22 }} />
+                            <span
+                              style={{
+                                fontSize: 12,
+                                marginLeft: 2,
+                              }}
+                            >
+                              Remove
+                            </span>
                           </button>
                         </div>
                       );
@@ -330,9 +338,7 @@ const Cart = () => {
 
       {isLoading && (
         <div className="loadingOverlay d-flex align-items-center justify-content-center">
-          <div className="loadingTextBox">
-            Updating your cart...
-          </div>
+          <div className="loadingTextBox">Updating your cart...</div>
         </div>
       )}
     </>
