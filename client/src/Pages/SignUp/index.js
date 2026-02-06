@@ -22,7 +22,6 @@ const SignUp = () => {
     email: "",
     phone: "",
     password: "",
-    // ❌ isAdmin removed – never controlled by client
   });
 
   const context = useContext(MyContext);
@@ -33,10 +32,10 @@ const SignUp = () => {
     context.setEnableFilterTab(false);
 
     return () => {
-      // optional: restore when leaving page
       context.setisHeaderFooterShow(true);
       context.setEnableFilterTab(true);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const onchangeInput = (e) => {
@@ -116,7 +115,6 @@ const SignUp = () => {
     try {
       setIsLoading(true);
 
-      // Never send isAdmin from client
       const payload = {
         name: formfields.name.trim(),
         email: formfields.email.trim(),
@@ -127,9 +125,7 @@ const SignUp = () => {
       const res = await postData("/api/user/signup", payload);
 
       if (res.status !== "FAILED") {
-        // Save email so OTP page can use it
         localStorage.setItem("userEmail", payload.email);
-        // optional: mark action type for clarity
         localStorage.setItem("actionType", "verifyAccount");
 
         context.setAlertBox({
@@ -224,49 +220,72 @@ const SignUp = () => {
       });
   };
 
+  const handleCancel = () => {
+    context.setisHeaderFooterShow(true);
+    history("/");
+  };
+
   return (
     <section className="section signInPage signUpPage">
+      {/* keep your gradient + wave background */}
       <div className="shape-bottom">
         <svg
           fill="#fff"
-          id="Layer_1"
           x="0px"
           y="0px"
           viewBox="0 0 1921 819.8"
           style={{ enableBackground: "new 0 0 1921 819.8" }}
         >
-          <path
-            className="st0"
-            d="M1921,413.1v406.7H0V0.5h0.4l228.1,598.3c30,74.4,80.8,130.6,152.5,168.6c107.6,57,212.1,40.7,245.7,34.4 c22.4-4.2,54.9-13.1,97.5-26.6L1921,400.5V413.1z"
-          ></path>
+          <path d="M1921,413.1v406.7H0V0.5h0.4l228.1,598.3c30,74.4,80.8,130.6,152.5,168.6c107.6,57,212.1,40.7,245.7,34.4 c22.4-4.2,54.9-13.1,97.5-26.6L1921,400.5V413.1z"></path>
         </svg>
       </div>
 
       <div className="container">
-        <div className="box card p-3 shadow border-0">
-          <div className="text-center">
-            <img src={Logo} alt="Thriftkart" />
+        <div
+          className="box card p-3 shadow border-0"
+          style={{
+            borderRadius: 14,
+            maxWidth: "500px",
+            width: "100%",
+          }}
+        >
+          <div className="text-center mb-2">
+            <img
+              src={Logo}
+              alt="Thriftkart"
+              style={{ maxWidth: 120, height: "auto" }}
+            />
           </div>
 
           <form className="mt-2" onSubmit={register}>
-            <h2 className="mb-3">Sign Up</h2>
+            <h2 className="mb-1" style={{ fontWeight: 600, fontSize: 24 }}>
+              Create your account
+            </h2>
+            <p
+              className="txt mb-3"
+              style={{ fontWeight: 400, fontSize: 13, color: "#6b7280" }}
+            >
+              Sign up to save favourites, track orders and get personalised
+              offers from Thriftkart.
+            </p>
 
             <div className="row">
-              <div className="col-md-6">
+              <div className="col-sm-6">
                 <div className="form-group">
                   <TextField
-                    label="Name"
+                    label="Full Name"
                     name="name"
                     onChange={onchangeInput}
                     type="text"
                     variant="standard"
                     className="w-100"
                     value={formfields.name}
+                    required
                   />
                 </div>
               </div>
 
-              <div className="col-md-6">
+              <div className="col-sm-6">
                 <div className="form-group">
                   <TextField
                     label="Phone No."
@@ -276,6 +295,7 @@ const SignUp = () => {
                     variant="standard"
                     className="w-100"
                     value={formfields.phone}
+                    required
                   />
                 </div>
               </div>
@@ -290,6 +310,7 @@ const SignUp = () => {
                 variant="standard"
                 className="w-100"
                 value={formfields.email}
+                required
               />
             </div>
 
@@ -302,41 +323,36 @@ const SignUp = () => {
                 variant="standard"
                 className="w-100"
                 value={formfields.password}
+                required
               />
             </div>
 
-            <div className="d-flex align-items-center mt-3 mb-3 ">
-              <div className="row w-100">
-                <div className="col-md-6">
-                  <Button
-                    type="submit"
-                    disabled={isLoading}
-                    className="btn-blue w-100 btn-lg btn-big"
-                  >
-                    {isLoading ? <CircularProgress size={24} /> : "Sign Up"}
-                  </Button>
-                </div>
-                <div className="col-md-6 pr-0">
-                  <Link to="/" className="d-block w-100">
-                    <Button
-                      className="btn-lg btn-big w-100"
-                      variant="outlined"
-                      onClick={() => context.setisHeaderFooterShow(true)}
-                    >
-                      Cancel
-                    </Button>
-                  </Link>
-                </div>
-              </div>
+            <div className="d-flex align-items-center mt-3 mb-2">
+              <Button
+                type="submit"
+                disabled={isLoading}
+                className="btn-blue btn-lg btn-big col"
+              >
+                {isLoading ? <CircularProgress size={22} /> : "Sign Up"}
+              </Button>
+
+              <Button
+                className="btn-lg btn-big col ml-3"
+                variant="outlined"
+                onClick={handleCancel}
+              >
+                Cancel
+              </Button>
             </div>
 
-            <p className="txt">
+            <p className="txt mb-1" style={{ fontSize: 14 }}>
+              Already have an account?{" "}
               <Link to="/signIn" className="border-effect">
                 Sign In
               </Link>
             </p>
 
-            <h6 className="mt-4 text-center font-weight-bold">
+            <h6 className="mt-3 text-center font-weight-bold">
               Or continue with social account
             </h6>
 
@@ -345,8 +361,17 @@ const SignUp = () => {
               variant="outlined"
               onClick={signInWithGoogle}
             >
-              <img src={GoogleImg} alt="Google" /> Sign In with Google
+              <img src={GoogleImg} alt="Google" /> Sign Up with Google
             </Button>
+
+            <p
+              className="mt-3 mb-0 text-center"
+              style={{ fontSize: 11, color: "#6b7280" }}
+            >
+              By creating an account, you agree to Thriftkart&apos;s{" "}
+              <span className="border-effect">Terms of Use</span> and{" "}
+              <span className="border-effect">Privacy Policy</span>.
+            </p>
           </form>
         </div>
       </div>

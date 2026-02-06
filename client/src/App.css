@@ -1180,4 +1180,272 @@ input[type=number]::-webkit-outer-spin-button {
   border: 0;
 }
 
+.listingHeader .listingTitle {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.listingHeader .listingMeta {
+  font-size: 13px;
+  opacity: 0.8;
+}
+
+.activeFiltersBar .label {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.activeFiltersBar .filterChip {
+  background: #e5edff;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  margin-right: 6px;
+  margin-bottom: 4px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.activeFiltersBar .filterChipClose {
+  border: 0;
+  background: transparent;
+  margin-left: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* optional: grid tweaks for skeleton */
+.productListing.skeletonGrid .productItem {
+  opacity: 0.9;
+}
+
+/* === CART PAGE BASE LAYOUT === */
+
+.cartPage {
+  padding-top: 40px;
+}
+
+.cartItemsCard,
+.cartDetailsCard {
+  border-radius: 10px;
+}
+
+/* Each cart row */
+.cartItemRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+  position: relative;
+}
+
+.cartItemRow:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+/* Thumbnail */
+.cartItemThumb {
+  flex-shrink: 0;
+}
+
+.cartItemThumb .imgWrapper {
+  width: 80px;
+  height: 80px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #f5f5f5;
+}
+
+.cartItemThumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Product info */
+.cartItemInfo {
+  flex: 1;
+}
+
+.cartItemInfo h5 {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.cartItemInfo a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.cartItemInfo a:hover {
+  text-decoration: underline;
+}
+
+/* Right meta block (price / qty / subtotal) */
+.cartItemMeta {
+  min-width: 180px;
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cartItemMeta .unitPrice .font-weight-bold,
+.cartItemMeta .subTotal .font-weight-bold {
+  font-size: 14px;
+}
+
+/* Remove button */
+.cartItemRemoveBtn {
+  border: 0;
+  background: transparent;
+  color: #999;
+  font-size: 28px;
+  margin-left: 8px;
+  cursor: pointer;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  transition: color 0.15s ease-in-out;
+}
+
+.cartItemRemoveBtn:hover {
+  color: #ff4b5c;
+}
+
+/* Order summary card */
+.cartDetailsCard h4 {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.cartDetailsCard .text-red {
+  color: #ed174a !important;
+}
+
+/* Loading overlay */
+.loadingOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.25);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.loadingOverlay .loadingTextBox {
+  padding: 10px 20px;
+  background: #fff;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* === RESPONSIVE BEHAVIOUR === */
+
+/* Re-order inner pieces so they line up nicely on all screens */
+.cartItemThumb { order: 1; }
+.cartItemInfo  { order: 2; }
+.cartItemMeta  { order: 3; }
+.cartItemRemoveBtn { order: 4; }
+
+/* Tablets and down */
+@media (max-width: 991.98px) {
+  .cartItemRow {
+    gap: 12px;
+  }
+
+  .cartItemMeta {
+    min-width: 160px;
+  }
+}
+
+/* Mobiles */
+@media (max-width: 767.98px) {
+  .cartItemRow {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding-bottom: 12px;
+    margin-bottom: 12px;
+  }
+
+  .cartItemThumb .imgWrapper {
+    width: 70px;
+    height: 70px;
+  }
+
+  .cartItemInfo h5 {
+    font-size: 14px;
+  }
+
+  /* Thumb + title on first line */
+  .cartItemThumb {
+    flex: 0 0 70px;
+  }
+
+  .cartItemInfo {
+    flex: 1 1 calc(100% - 70px - 16px);
+  }
+
+  /* Meta block goes full width below */
+  .cartItemMeta {
+    flex: 1 1 100%;
+    min-width: 0;
+    text-align: left;
+    margin-top: 6px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-column-gap: 12px;
+    grid-row-gap: 4px;
+  }
+
+  .cartItemMeta .unitPrice,
+  .cartItemMeta .subTotal,
+  .cartItemMeta .cartItemQty {
+    text-align: left;
+  }
+
+  .cartItemQty {
+    margin-top: 2px;
+    margin-bottom: 2px;
+  }
+
+  /* Remove button floats to top-right of the card row */
+  .cartItemRemoveBtn {
+    position: absolute;
+    top: 2px;
+    right: 0;
+    font-size: 26px;
+  }
+
+  /* Summary card spacing */
+  .cartDetailsCard {
+    margin-top: 16px;
+  }
+}
+
+/* Extra-small screens */
+@media (max-width: 575.98px) {
+  .cartPage .hd {
+    font-size: 20px;
+  }
+
+  .cartItemInfo h5 {
+    font-size: 13px;
+  }
+
+  .cartItemMeta {
+    grid-template-columns: 1fr;
+  }
+}
+
+
 

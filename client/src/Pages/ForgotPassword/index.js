@@ -4,7 +4,7 @@ import TextField from "@mui/material/TextField";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
 
-import Logo from "../../assets/images/logo.png";
+import Logo from "../../assets/images/logo.png"; // or TKlogo if you prefer
 import { MyContext } from "../../App";
 import { postData } from "../../utils/api";
 
@@ -33,6 +33,7 @@ const ForgotPassword = () => {
       context.setisHeaderFooterShow(true);
       context.setEnableFilterTab(true);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const onChangeInput = (e) => {
@@ -73,14 +74,14 @@ const ForgotPassword = () => {
       });
 
       if (res?.success) {
-        // Optional: keep consistency with other flows
+        // keep consistency with other flows
         localStorage.setItem("userEmail", formfields.email);
         localStorage.setItem("actionType", "changePassword");
 
         context.setAlertBox({
           open: true,
           error: false,
-          msg: res?.message || "OTP sent!",
+          msg: res?.message || "OTP sent to your email",
         });
         setStep(2);
       } else {
@@ -126,7 +127,7 @@ const ForgotPassword = () => {
         context.setAlertBox({
           open: true,
           error: false,
-          msg: res?.message || "OTP Verified!",
+          msg: res?.message || "OTP verified. You can now set a new password.",
         });
       } else {
         setResetToken(null);
@@ -157,7 +158,7 @@ const ForgotPassword = () => {
       context.setAlertBox({
         open: true,
         error: true,
-        msg: "Please fill fields correctly",
+        msg: "Please fill all fields correctly",
       });
       return;
     }
@@ -165,7 +166,7 @@ const ForgotPassword = () => {
       context.setAlertBox({
         open: true,
         error: true,
-        msg: "Verify OTP first",
+        msg: "Please verify OTP first",
       });
       return;
     }
@@ -183,7 +184,7 @@ const ForgotPassword = () => {
         context.setAlertBox({
           open: true,
           error: false,
-          msg: res?.message || "Password reset!",
+          msg: res?.message || "Password reset successfully!",
         });
 
         setTimeout(() => {
@@ -208,110 +209,202 @@ const ForgotPassword = () => {
     }
   };
 
+  const title =
+    step === 1 ? "Forgot your password?" : "Verify OTP & reset password";
+
+  const subtitle =
+    step === 1
+      ? "Enter your registered email and we’ll send you a one-time code to reset your password."
+      : "We’ve sent an OTP to your email. Verify it and set a new password.";
+
   return (
-    <section className="section signInPage">
+    <section className="section signInPage otpPage">
+      {/* gradient background & wave, matches SignIn / SignUp */}
       <div className="shape-bottom">
-        <svg fill="#fff" viewBox="0 0 1921 819.8">
+        <svg
+          fill="#fff"
+          viewBox="0 0 1921 819.8"
+          style={{ enableBackground: "new 0 0 1921 819.8" }}
+        >
           <path d="M1921,413.1v406.7H0V0.5h0.4l228.1,598.3c30,74.4,80.8,130.6,152.5,168.6c107.6,57,212.1,40.7,245.7,34.4 
             c22.4-4.2,54.9-13.1,97.5-26.6L1921,400.5V413.1z" />
         </svg>
       </div>
 
       <div className="container">
-        <div className="box card p-3 shadow border-0">
-          <div className="text-center">
-            <img src={Logo} alt="Logo" />
+        <div
+          className="box card p-3 shadow border-0"
+          style={{
+            maxWidth: "460px",
+            width: "100%",
+            borderRadius: 14,
+            margin: "auto",
+          }}
+        >
+          <div className="text-center mb-2">
+            <img
+              src={Logo}
+              alt="Logo"
+              style={{ maxWidth: 120, height: "auto" }}
+            />
           </div>
 
           <form
-            className="mt-3"
+            className="mt-2"
             onSubmit={step === 1 ? handleSendOtp : handleResetPassword}
           >
-            <h2 className="mb-4 text-center">
-              {step === 1
-                ? "Forgot Password ?"
-                : "Verify OTP & Reset Password"}
-            </h2>
+            {/* Title + Step indicator */}
+            <div className="text-center mb-3">
+              <h2
+                className="mb-1"
+                style={{ fontSize: 24, fontWeight: 600, lineHeight: 1.3 }}
+              >
+                {title}
+              </h2>
+              <p
+                style={{
+                  fontSize: 13,
+                  color: "#6b7280",
+                  marginBottom: 6,
+                }}
+              >
+                {subtitle}
+              </p>
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  color: "#9ca3af",
+                }}
+              >
+                Step {step} of 2
+              </span>
+            </div>
 
-            {/* Email */}
-            <TextField
-              label="Email"
-              type="email"
-              required
-              variant="standard"
-              className="w-100 mb-3"
-              name="email"
-              value={formfields.email}
-              onChange={onChangeInput}
-              disabled={step === 2}
-            />
+            {/* Email – always visible */}
+            <div className="form-group mb-3">
+              <TextField
+                label="Registered Email"
+                type="email"
+                required
+                variant="standard"
+                className="w-100"
+                name="email"
+                value={formfields.email}
+                onChange={onChangeInput}
+                disabled={step === 2}
+              />
+            </div>
+
+            {step === 1 && (
+              <p
+                className="mb-3"
+                style={{
+                  fontSize: 12,
+                  color: "#9ca3af",
+                }}
+              >
+                We&apos;ll send a one-time OTP code to this email to verify it
+                belongs to you.
+              </p>
+            )}
 
             {step === 2 && (
               <>
-                <TextField
-                  label="OTP"
-                  type="text"
-                  required
-                  variant="standard"
-                  className="w-100 mb-3"
-                  name="otp"
-                  value={formfields.otp}
-                  onChange={onChangeInput}
-                />
+                <div className="form-group mb-3">
+                  <TextField
+                    label="OTP"
+                    type="text"
+                    required
+                    variant="standard"
+                    className="w-100"
+                    name="otp"
+                    value={formfields.otp}
+                    onChange={onChangeInput}
+                  />
+                </div>
 
-                <div className="d-flex mb-3 gap-2">
+                <div
+                  className="d-flex mb-3"
+                  style={{ gap: "10px", alignItems: "center" }}
+                >
                   <Button
                     type="button"
-                    variant="outlined"
-                    className="w-100"
+                    variant={resetToken ? "contained" : "outlined"}
+                    className={
+                      resetToken ? "btn-blue w-100 btn-big" : "w-100 btn-big"
+                    }
                     onClick={handleVerifyOtp}
                     disabled={!formfields.otp || isLoading}
                   >
                     {resetToken ? "OTP Verified" : "Verify OTP"}
                   </Button>
 
-                  {/* Resend OTP in step 2 */}
                   <Button
                     type="button"
                     variant="text"
                     className="w-100"
                     onClick={handleSendOtp}
                     disabled={isLoading}
+                    style={{ fontSize: 13 }}
                   >
                     Resend OTP
                   </Button>
                 </div>
 
-                <TextField
-                  label="New Password"
-                  type="password"
-                  required
-                  variant="standard"
-                  className="w-100 mb-3"
-                  name="newPassword"
-                  value={formfields.newPassword}
-                  onChange={onChangeInput}
-                />
-                <TextField
-                  label="Confirm Password"
-                  type="password"
-                  required
-                  variant="standard"
-                  className="w-100 mb-3"
-                  name="confirmPassword"
-                  value={formfields.confirmPassword}
-                  onChange={onChangeInput}
-                />
+                <div className="form-group mb-3">
+                  <TextField
+                    label="New Password"
+                    type="password"
+                    required
+                    variant="standard"
+                    className="w-100"
+                    name="newPassword"
+                    value={formfields.newPassword}
+                    onChange={onChangeInput}
+                  />
+                </div>
+
+                <div className="form-group mb-3">
+                  <TextField
+                    label="Confirm New Password"
+                    type="password"
+                    required
+                    variant="standard"
+                    className="w-100"
+                    name="confirmPassword"
+                    value={formfields.confirmPassword}
+                    onChange={onChangeInput}
+                  />
+                </div>
+
+                <p
+                  style={{
+                    fontSize: 11,
+                    color: "#9ca3af",
+                    marginTop: -4,
+                    marginBottom: 12,
+                  }}
+                >
+                  Password must be at least 6 characters. Make sure both fields
+                  match.
+                </p>
               </>
             )}
 
             <Button
               type="submit"
               className="btn-blue col btn-lg btn-big w-100"
-              disabled={isLoading || (step === 1 && !canSubmitStep1)}
+              disabled={
+                isLoading ||
+                (step === 1 && !canSubmitStep1) ||
+                (step === 2 && !canSubmitStep2)
+              }
             >
               {isLoading ? (
-                <CircularProgress size={24} />
+                <CircularProgress size={22} />
               ) : step === 1 ? (
                 "Send OTP"
               ) : (
