@@ -149,9 +149,9 @@ const SearchBox = (props) => {
                     <Link to={`/products/${productId}`}>
                       {imageSrc ? (
                         <img
-                          src={imageSrc}
+                          src={item?.image}
                           className="w-100"
-                          alt={name || "Product"}
+                          alt={item?.productTitle}
                         />
                       ) : (
                         // clearly visible fallback so you know when image path is null
