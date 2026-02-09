@@ -131,7 +131,7 @@ const Cart = () => {
               </p>
             </div>
 
-            {cartData?.length > 0 && (
+            {/* {cartData?.length > 0 && (
               <div className="ml-auto">
                 <Link to="/">
                   <Button className="btn-blue btn-round">
@@ -139,7 +139,7 @@ const Cart = () => {
                   </Button>
                 </Link>
               </div>
-            )}
+            )} */}
           </div>
 
           {cartData?.length > 0 ? (
