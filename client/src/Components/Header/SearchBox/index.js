@@ -134,7 +134,7 @@ const SearchBox = (props) => {
           <div className="searchResults res-hide">
             {searchData.map((item, index) => {
               const productId = resolveProductId(item);
-              const imageSrc = resolveProductImage(item);
+              const imageSrc = resolveProductImage(item?.image);
 
               const name = item?.name || item?.productTitle || "";
               const price = item?.price;
@@ -149,9 +149,9 @@ const SearchBox = (props) => {
                     <Link to={`/products/${productId}`}>
                       {imageSrc ? (
                         <img
-                          src={item?.image}
+                          src={imageSrc}
                           className="w-100"
-                          alt={item?.productTitle}
+                          alt={name || "Product"}
                         />
                       ) : (
                         // clearly visible fallback so you know when image path is null
