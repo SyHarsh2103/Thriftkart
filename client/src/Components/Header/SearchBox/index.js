@@ -28,20 +28,35 @@ const resolveProductId = (item) => {
 };
 
 const resolveProductImage = (item) => {
-  // 1) Same pattern as ProductItem: images[0] (string or object)
-  if (Array.isArray(item?.images) && item.images.length > 0) {
+  if (!item) return null;
+
+  // 1) images[]
+  if (Array.isArray(item.images) && item.images.length > 0) {
     const first = item.images[0];
     if (typeof first === "string") return first;
     if (first?.url) return first.url;
     if (first?.secure_url) return first.secure_url;
     if (first?.imageUrl) return first.imageUrl;
+    if (first?.path) return first.path;
   }
 
-  // 2) Other likely fallbacks
-  if (item?.imageUrl) return item.imageUrl;
-  if (item?.image) return item.image;
-  if (item?.thumbnail) return item.thumbnail;
-  if (item?.coverImage) return item.coverImage;
+  // 2) image[]
+  if (Array.isArray(item.image) && item.image.length > 0) {
+    const first = item.image[0];
+    if (typeof first === "string") return first;
+    if (first?.url) return first.url;
+    if (first?.secure_url) return first.secure_url;
+    if (first?.imageUrl) return first.imageUrl;
+    if (first?.path) return first.path;
+  }
+
+  // 3) image as string
+  if (typeof item.image === "string") return item.image;
+
+  // 4) other single fields
+  if (item.imageUrl) return item.imageUrl;
+  if (item.thumbnail) return item.thumbnail;
+  if (item.coverImage) return item.coverImage;
 
   return null;
 };
@@ -134,7 +149,8 @@ const SearchBox = (props) => {
           <div className="searchResults res-hide">
             {searchData.map((item, index) => {
               const productId = resolveProductId(item);
-              const imageSrc = resolveProductImage(item?.image);
+              // ✅ FIX: pass the whole item
+              const imageSrc = resolveProductImage(item);
 
               const name = item?.name || item?.productTitle || "";
               const price = item?.price;
@@ -154,7 +170,6 @@ const SearchBox = (props) => {
                           alt={name || "Product"}
                         />
                       ) : (
-                        // clearly visible fallback so you know when image path is null
                         <div
                           style={{
                             width: "100%",
