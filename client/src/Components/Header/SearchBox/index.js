@@ -1,6 +1,6 @@
 import Button from "@mui/material/Button";
-import Rating from "@mui/material/Rating";
 import CircularProgress from "@mui/material/CircularProgress";
+import Rating from "@mui/material/Rating";
 import { IoIosSearch, IoIosImages } from "react-icons/io";
 import { ClickAwayListener } from "@mui/base";
 import { useContext, useState } from "react";
@@ -8,6 +8,48 @@ import { Link, useNavigate } from "react-router-dom";
 
 import { fetchDataFromApi } from "../../../utils/api";
 import { MyContext } from "../../../App";
+
+const DEBUG_SEARCH = true; // <- keep this true while debugging
+
+const normalizeResults = (res) => {
+  if (!res) return [];
+
+  // common patterns:
+  if (Array.isArray(res.products)) return res.products;
+  if (Array.isArray(res.data)) return res.data;
+  if (Array.isArray(res.items)) return res.items;
+  if (Array.isArray(res)) return res;
+
+  return [];
+};
+
+const resolveProductId = (item) => {
+  return item?._id || item?.id || item?.prodId || item?.productId || "";
+};
+
+const resolveProductImage = (item) => {
+  // 1) Same pattern as ProductItem: images[0] (string or object)
+  if (Array.isArray(item?.images) && item.images.length > 0) {
+    const first = item.images[0];
+    if (typeof first === "string") return first;
+    if (first?.url) return first.url;
+    if (first?.secure_url) return first.secure_url;
+    if (first?.imageUrl) return first.imageUrl;
+  }
+
+  // 2) Other likely fallbacks
+  if (item?.imageUrl) return item.imageUrl;
+  if (item?.image) return item.image;
+  if (item?.thumbnail) return item.thumbnail;
+  if (item?.coverImage) return item.coverImage;
+
+  return null;
+};
+
+const formatName = (name) => {
+  if (!name) return "";
+  return name.length > 50 ? `${name.substring(0, 47)}...` : name;
+};
 
 const SearchBox = (props) => {
   const [searchFields, setSearchFields] = useState("");
@@ -17,18 +59,11 @@ const SearchBox = (props) => {
   const context = useContext(MyContext);
   const history = useNavigate();
 
-  // Normalize API result to a flat array of products
-  const normalizeResults = (res) => {
-    if (Array.isArray(res?.products)) return res.products;
-    if (Array.isArray(res)) return res;
-    return [];
-  };
-
-  const onChangeValue = async (e) => {
+  const handleChange = async (e) => {
     const value = e.target.value;
     setSearchFields(value);
 
-    if (!value) {
+    if (!value.trim()) {
       setSearchData([]);
       return;
     }
@@ -37,7 +72,17 @@ const SearchBox = (props) => {
       const res = await fetchDataFromApi(
         `/api/search?q=${encodeURIComponent(value)}`
       );
+
+      if (DEBUG_SEARCH) {
+        console.log("🔍 /api/search raw response:", res);
+      }
+
       const list = normalizeResults(res);
+
+      if (DEBUG_SEARCH && list.length > 0) {
+        console.log("🔍 First normalized item:", list[0]);
+      }
+
       setSearchData(list);
     } catch (err) {
       console.error("Search error:", err);
@@ -46,7 +91,7 @@ const SearchBox = (props) => {
   };
 
   const searchProducts = async () => {
-    if (!searchFields) return;
+    if (!searchFields.trim()) return;
 
     try {
       setIsLoading(true);
@@ -57,7 +102,6 @@ const SearchBox = (props) => {
       );
       const list = normalizeResults(res);
 
-      // Store full result in context for /search page
       context.setSearchData?.(list);
 
       setIsLoading(false);
@@ -73,11 +117,6 @@ const SearchBox = (props) => {
     setSearchData([]);
   };
 
-  const formatName = (name) => {
-    if (!name) return "";
-    return name.length > 50 ? `${name.substring(0, 47)}...` : name;
-  };
-
   return (
     <ClickAwayListener onClickAway={handleClickAway}>
       <div className="headerSearch ml-3 mr-3">
@@ -85,9 +124,8 @@ const SearchBox = (props) => {
           type="text"
           placeholder="Search for products..."
           value={searchFields}
-          onChange={onChangeValue}
+          onChange={handleChange}
         />
-
         <Button onClick={searchProducts}>
           {isLoading ? <CircularProgress /> : <IoIosSearch />}
         </Button>
@@ -95,12 +133,8 @@ const SearchBox = (props) => {
         {searchData?.length > 0 && (
           <div className="searchResults res-hide">
             {searchData.map((item, index) => {
-              // 🔹 Same ID logic as ProductItem
-              const productId = item?._id || item?.id;
-
-              // 🔹 Same image logic pattern as ProductItem (images[0] first)
-              const imageSrc =
-                item?.images?.[0] || item?.image || item?.thumbnail || "";
+              const productId = resolveProductId(item);
+              const imageSrc = resolveProductImage(item);
 
               const name = item?.name || item?.productTitle || "";
               const price = item?.price;
@@ -120,19 +154,19 @@ const SearchBox = (props) => {
                           alt={name || "Product"}
                         />
                       ) : (
-                        // Fallback if no image – keeps the box visible
+                        // clearly visible fallback so you know when image path is null
                         <div
                           style={{
                             width: "100%",
                             height: "100%",
-                            background: "#f3f3f3",
                             borderRadius: "10px",
+                            background: "#f3f3f3",
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
                           }}
                         >
-                          <IoIosImages style={{ opacity: 0.35 }} />
+                          <IoIosImages style={{ fontSize: 26, opacity: 0.4 }} />
                         </div>
                       )}
                     </Link>
@@ -143,7 +177,6 @@ const SearchBox = (props) => {
                       <h4 className="mb-1">{formatName(name)}</h4>
                     </Link>
 
-                    {/* Optional rating display in dropdown */}
                     {rating > 0 && (
                       <div className="d-flex align-items-center mb-1">
                         <Rating
