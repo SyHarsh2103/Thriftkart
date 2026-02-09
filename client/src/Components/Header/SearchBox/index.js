@@ -9,12 +9,12 @@ import { Link, useNavigate } from "react-router-dom";
 import { fetchDataFromApi } from "../../../utils/api";
 import { MyContext } from "../../../App";
 
-const DEBUG_SEARCH = true; // <- keep this true while debugging
+const DEBUG_SEARCH = true; // set false in production
 
+// --- Normalize the API response into an array of products ---
 const normalizeResults = (res) => {
   if (!res) return [];
 
-  // common patterns:
   if (Array.isArray(res.products)) return res.products;
   if (Array.isArray(res.data)) return res.data;
   if (Array.isArray(res.items)) return res.items;
@@ -23,14 +23,16 @@ const normalizeResults = (res) => {
   return [];
 };
 
+// --- Extract product id robustly ---
 const resolveProductId = (item) => {
   return item?._id || item?.id || item?.prodId || item?.productId || "";
 };
 
+// --- Extract product image robustly (same idea as ProductItem) ---
 const resolveProductImage = (item) => {
   if (!item) return null;
 
-  // 1) images[]
+  // Preferred: images[]
   if (Array.isArray(item.images) && item.images.length > 0) {
     const first = item.images[0];
     if (typeof first === "string") return first;
@@ -40,7 +42,7 @@ const resolveProductImage = (item) => {
     if (first?.path) return first.path;
   }
 
-  // 2) image[]
+  // Sometimes backend might use "image" as array
   if (Array.isArray(item.image) && item.image.length > 0) {
     const first = item.image[0];
     if (typeof first === "string") return first;
@@ -50,10 +52,10 @@ const resolveProductImage = (item) => {
     if (first?.path) return first.path;
   }
 
-  // 3) image as string
+  // Or "image" as a string field
   if (typeof item.image === "string") return item.image;
 
-  // 4) other single fields
+  // Other common fields
   if (item.imageUrl) return item.imageUrl;
   if (item.thumbnail) return item.thumbnail;
   if (item.coverImage) return item.coverImage;
@@ -74,6 +76,7 @@ const SearchBox = (props) => {
   const context = useContext(MyContext);
   const history = useNavigate();
 
+  // --- Handle typing in the search box (live suggestions) ---
   const handleChange = async (e) => {
     const value = e.target.value;
     setSearchFields(value);
@@ -105,6 +108,7 @@ const SearchBox = (props) => {
     }
   };
 
+  // --- Full search submit (go to /search page) ---
   const searchProducts = async () => {
     if (!searchFields.trim()) return;
 
@@ -149,7 +153,6 @@ const SearchBox = (props) => {
           <div className="searchResults res-hide">
             {searchData.map((item, index) => {
               const productId = resolveProductId(item);
-              // ✅ FIX: pass the whole item
               const imageSrc = resolveProductImage(item);
 
               const name = item?.name || item?.productTitle || "";
@@ -170,6 +173,7 @@ const SearchBox = (props) => {
                           alt={name || "Product"}
                         />
                       ) : (
+                        // fallback grey box when no image
                         <div
                           style={{
                             width: "100%",
@@ -181,7 +185,9 @@ const SearchBox = (props) => {
                             justifyContent: "center",
                           }}
                         >
-                          <IoIosImages style={{ fontSize: 26, opacity: 0.4 }} />
+                          <IoIosImages
+                            style={{ fontSize: 26, opacity: 0.4 }}
+                          />
                         </div>
                       )}
                     </Link>
