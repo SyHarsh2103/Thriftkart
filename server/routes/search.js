@@ -3,14 +3,25 @@ const { Product } = require("../models/products.js");
 const express = require("express");
 const router = express.Router();
 
+// ==== CONFIG (same as products.js) ====
+const BASE_URL = process.env.BASE_URL || "http://localhost:8000";
+
+// Convert image filenames -> full URLs (same logic as products.js)
+const toImageUrls = (filenames = []) =>
+  filenames.map((name) =>
+    String(name).startsWith("http")
+      ? name
+      : `${BASE_URL}/uploads/products/${name}`
+  );
+
 // Helper to safely parse integers
 function parseIntOr(v, d) {
   const n = parseInt(v, 10);
   return Number.isFinite(n) ? n : d;
 }
 
-// Optional location filter (matches your product location behavior idea)
-// If you don't use "location" in your Product schema, you can remove this.
+// Optional location filter (matches your product location behavior)
+// If you don't use "location" in Product schema, you can remove this.
 function buildLocationFilter(location) {
   if (!location || location === "All") return {};
   return {
@@ -38,7 +49,10 @@ router.get("/", async (req, res) => {
     }
 
     const page = Math.max(1, parseIntOr(req.query.page, 1));
-    const perPage = Math.min(50, Math.max(1, parseIntOr(req.query.perPage, 10)));
+    const perPage = Math.min(
+      50,
+      Math.max(1, parseIntOr(req.query.perPage, 10))
+    );
 
     // Base search filter
     const baseFilter = {
@@ -51,7 +65,7 @@ router.get("/", async (req, res) => {
       ...buildLocationFilter(location),
     };
 
-    // If perPage is not provided in query at all, return full list (with a hard cap)
+    // Decide if we paginate based on presence of both page + perPage in query
     const paginate =
       typeof req.query.page !== "undefined" &&
       typeof req.query.perPage !== "undefined";
@@ -69,8 +83,13 @@ router.get("/", async (req, res) => {
 
       const totalPages = Math.ceil(total / perPage);
 
+      const productsWithUrls = items.map((p) => ({
+        ...p,
+        images: toImageUrls(p.images || []),
+      }));
+
       return res.status(200).json({
-        products: items,
+        products: productsWithUrls,
         totalPages,
         page,
         perPage,
@@ -84,7 +103,12 @@ router.get("/", async (req, res) => {
         .limit(100)
         .lean();
 
-      return res.json(items);
+      const productsWithUrls = items.map((p) => ({
+        ...p,
+        images: toImageUrls(p.images || []),
+      }));
+
+      return res.json(productsWithUrls);
     }
   } catch (err) {
     console.error("GET /search error:", err);
